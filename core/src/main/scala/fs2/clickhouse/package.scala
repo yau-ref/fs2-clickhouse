@@ -1,18 +1,15 @@
-package fs2.clickhouse
+package fs2
 
-import cats.effect.IO
-import cats.effect.kernel.Async
 import fs2.Pipe
-import fs2.clickhouse.internal.{ClickhouseClient, ClickhouseHTTPClient}
+import fs2.clickhouse.internal.ClickhouseClient
 
 package object clickhouse {
-  
+
   // public api
-  
+
   type ClickhouseStream[F[_]] = ClickhouseClient[F]
   val ClickhouseStream = internal.ClickhouseStream
 
   type ClickhouseSink[F[_], I] = Pipe[F, I, Nothing]
 
-  
 }
