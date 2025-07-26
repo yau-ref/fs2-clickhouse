@@ -29,7 +29,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
 
   private val requestReadChunkSize = 1
 
-  def query(q: String, timeout: Option[FiniteDuration] = None): fs2.Stream[F, String] =
+  override def query[T](q: String, timeout: Option[FiniteDuration] = None)(implicit decoder: JsonRowDecoder[F, T]): fs2.Stream[F, String] =
     for {
       request <- fs2.Stream.eval(prepareRequest(q, auth, timeout))
       responseStream: stream.Stream[String] <-
@@ -105,6 +105,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   }
 
   override def insert[T](statement: String): Pipe[F, T, Nothing] = ???
+
 }
 
 
