@@ -17,6 +17,7 @@ lazy val root = (project in file("."))
   .aggregate(core)
   .settings(
     name := "fs2-clickhouse",
+    crossScalaVersions := Nil,
     publish / skip := true
   )
 
@@ -24,7 +25,6 @@ lazy val core = (project in file("core"))
   .settings(commonSettings)
   .settings(
     name := "core",
-    crossScalaVersions := Nil,
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-core" % fs2Version,
       "co.fs2" %% "fs2-io"   % fs2Version,
@@ -36,7 +36,7 @@ lazy val core = (project in file("core"))
       // scala version specific stuff
       CrossVersion.partialVersion(scalaVersion.value) match {
         case Some((2, _)) =>
-          List(compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1" cross CrossVersion.full))
+          List(compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1" cross CrossVersion.binary))
         case _ => Nil
       }
     }
