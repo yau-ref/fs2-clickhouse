@@ -1,6 +1,5 @@
 package fs2.clickhouse.internal
 
-import cats.effect.Async
 import fs2.Pipe
 
 import scala.concurrent.duration.FiniteDuration
