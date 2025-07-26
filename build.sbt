@@ -9,9 +9,24 @@ ThisBuild / scalaVersion := scala3
 val fs2Version = "3.12.0"
 val catsEffectVersion = "3.6.3"
 
+// TODO: add bm4 for scala2
+
+lazy val commonSettings = Seq(
+  crossScalaVersions := supportedScalaVersions
+)
+
 lazy val root = (project in file("."))
+  .aggregate(core)
   .settings(
     name := "fs2-clickhouse",
+    publish / skip := true
+  ).aggregate()
+
+lazy val core = (project in file("core"))
+  .settings(commonSettings)
+  .settings(
+    name := "core",
+    crossScalaVersions := Nil,
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-core" % fs2Version,
       "co.fs2" %% "fs2-io"   % fs2Version,
@@ -20,5 +35,3 @@ lazy val root = (project in file("."))
       "io.circe" %% "circe-core" % "0.14.14"
     )
   )
-
-
