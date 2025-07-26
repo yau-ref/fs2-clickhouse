@@ -1,6 +1,10 @@
 ThisBuild / version := "0.1.0"
 
-ThisBuild / scalaVersion := "3.3.4"
+val scala3 = "3.3.4"
+val scala213 = "2.13.16"
+val supportedScalaVersions = Seq(scala3, scala213)
+
+ThisBuild / scalaVersion := scala3
 
 val fs2Version = "3.12.0"
 val catsEffectVersion = "3.6.3"
