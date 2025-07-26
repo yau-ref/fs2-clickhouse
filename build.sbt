@@ -9,8 +9,6 @@ ThisBuild / scalaVersion := scala3
 val fs2Version = "3.12.0"
 val catsEffectVersion = "3.6.3"
 
-// TODO: add bm4 for scala2
-
 lazy val commonSettings = Seq(
   crossScalaVersions := supportedScalaVersions
 )
@@ -20,7 +18,7 @@ lazy val root = (project in file("."))
   .settings(
     name := "fs2-clickhouse",
     publish / skip := true
-  ).aggregate()
+  )
 
 lazy val core = (project in file("core"))
   .settings(commonSettings)
@@ -32,6 +30,15 @@ lazy val core = (project in file("core"))
       "co.fs2" %% "fs2-io"   % fs2Version,
       "org.typelevel" %% "cats-effect" % catsEffectVersion,
       // TODO: make it optional and/or for testing only
-      "io.circe" %% "circe-core" % "0.14.14"
-    )
+      "io.circe" %% "circe-core" % "0.14.14",
+    ),
+    libraryDependencies ++= {
+      // scala version specific stuff
+      CrossVersion.partialVersion(scalaVersion.value) match {
+        case Some((2, _)) =>
+          List(compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1" cross CrossVersion.full))
+        case _ => Nil
+      }
+    }
+
   )
