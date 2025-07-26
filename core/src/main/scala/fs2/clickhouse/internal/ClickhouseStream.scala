@@ -10,7 +10,7 @@ object ClickhouseStream {
   def http[F[_]: Async](
     host: String,
     port: Int,
-    auth: Auth
+    auth: Auth = NoAuth
   ): Resource[F, ClickhouseClient[F]] = {
 
     // this can cause problems when compiling on older jdks
