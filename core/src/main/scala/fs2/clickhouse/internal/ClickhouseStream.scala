@@ -5,7 +5,18 @@ import cats.effect.{Async, Resource}
 import java.net.http.HttpClient
 
 object ClickhouseStream {
-  
+
+  /**
+   *
+   * Usage sample
+   *
+   * {{{
+   * fs2.Stream
+   * .resource(ClickhouseStream.http[IO]("localhost"))
+   * .flatMap(_.query("select * from users"))
+   * }}}
+
+   */
   def http[F[_]: Async](
     host: String,
     port: Int = 8123,
