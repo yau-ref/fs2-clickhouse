@@ -5,7 +5,7 @@ import fs2.Pipe
 
 import scala.concurrent.duration.FiniteDuration
 
-trait ClickhouseClient[F[_]: Async] {
+trait ClickhouseClient[F[_]] {
   
   def query(q: String, timeout: Option[FiniteDuration] = None): fs2.Stream[F, String]
   
