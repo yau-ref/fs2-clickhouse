@@ -1,3 +1,5 @@
+import sbt.Keys.libraryDependencies
+
 ThisBuild / version := "0.1.0"
 
 val scala3 = "3.3.4"
@@ -28,19 +30,52 @@ lazy val core = (project in file("core"))
     libraryDependencies ++= Seq(
       "co.fs2" %% "fs2-core" % fs2Version,
       "co.fs2" %% "fs2-io"   % fs2Version,
-      "org.typelevel" %% "cats-effect" % catsEffectVersion,
-      // TODO: make it optional and/or for testing only
+      "org.typelevel" %% "cats-effect" % catsEffectVersion
+    ),
+    libraryDependencies ++= { // TODO: remove duplication
+      CrossVersion.partialVersion(scalaVersion.value) match {
+        case Some((2, _)) =>
+          List(compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1" cross CrossVersion.binary))
+        case _ =>
+          Nil
+      }
+    }
+
+  ).enablePlugins()
+
+
+lazy val circe = (project in file("circe"))
+  .settings(commonSettings)
+  .settings(
+    name := "circe",
+    libraryDependencies ++= Seq(
       "io.circe" %% "circe-core" % "0.14.14",
       "io.circe" %% "circe-generic" % "0.14.14",
       "io.circe" %% "circe-parser" % "0.14.14",
     ),
     libraryDependencies ++= {
-      // scala version specific stuff
       CrossVersion.partialVersion(scalaVersion.value) match {
         case Some((2, _)) =>
           List(compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1" cross CrossVersion.binary))
-        case _ => Nil
+        case _ =>
+          Nil
       }
     }
 
-  )
+  ).dependsOn(core)
+
+lazy val examples = (project in file("examples"))
+  .settings(commonSettings)
+  .settings(
+    name := "examples",
+    libraryDependencies ++= {
+      CrossVersion.partialVersion(scalaVersion.value) match {
+        case Some((2, _)) =>
+          List(compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1" cross CrossVersion.binary))
+        case _ =>
+          Nil
+      }
+    }
+
+  ).dependsOn(core, circe)
+
