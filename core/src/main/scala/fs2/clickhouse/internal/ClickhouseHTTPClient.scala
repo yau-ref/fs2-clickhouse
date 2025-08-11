@@ -33,10 +33,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     for {
       request <- fs2.Stream.eval(prepareRequest(q, auth, timeout))
       responseStream: stream.Stream[String] <-
-        fs2.Stream
-          .bracket(
-            sendRequest(request)
-          )(stream => Async[F].delay(stream.close()))
+        fs2.Stream.fromAutoCloseable(sendRequest(request))
       itt = responseStream.iterator().asScala
       responseLine <- fs2.Stream.fromBlockingIterator[F](itt, requestReadChunkSize)
       decoded <- fs2.Stream.eval(decoder.decode(responseLine).value)
@@ -52,15 +49,15 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         )
       status = sent.statusCode()
       bodyStream: stream.Stream[String] <-
-        //  TODO: HTTP 200 response code does not guarantee that a query was successful
         if (status != 200)
-          Async[F].delay(sent.body().close()) *> //
+          Async[F].delay(sent.body().close()) *>
             MonadError[F, Throwable]
               .raiseError(new IllegalArgumentException(s"Response code was not 200: ${status}") with NoStackTrace)
         else
+          // TODO: response code 200 does not guarantee that a query was executed successfully
+          // https://clickhouse.com/docs/interfaces/http#http_response_codes_caveats
           Async[F].delay(sent.body())
     } yield bodyStream
-
 
   private def timeoutToJavaTime(timeout: FiniteDuration): JDuration =
     JDuration.ofNanos(timeout.toNanos)
