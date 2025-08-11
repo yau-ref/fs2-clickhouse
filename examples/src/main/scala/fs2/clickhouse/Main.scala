@@ -19,7 +19,7 @@ object Main {
         .resource(ClickhouseStream.http[IO]("localhost"))
         .flatMap(_.query[User]("select * from users"))
 
-    val exec: IO[List[String]] = stream.compile.toList
+    val exec: IO[List[User]] = stream.compile.toList
     println(exec.unsafeRunSync())
 
   }
