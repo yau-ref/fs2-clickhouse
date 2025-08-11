@@ -29,7 +29,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
 
   private val requestReadChunkSize = 1
 
-  override def query[T](q: String, timeout: Option[FiniteDuration] = None)(implicit decoder: JsonRowDecoder[F, T]): fs2.Stream[F, String] =
+  override def query[T](q: String, timeout: Option[FiniteDuration] = None)(implicit decoder: JsonRowDecoder[F, T]): fs2.Stream[F, T] =
     for {
       request <- fs2.Stream.eval(prepareRequest(q, auth, timeout))
       responseStream: stream.Stream[String] <-
@@ -39,7 +39,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           )(stream => Async[F].delay(stream.close()))
       itt = responseStream.iterator().asScala
       responseLine <- fs2.Stream.fromBlockingIterator[F](itt, requestReadChunkSize)
-    } yield responseLine
+      decoded <- fs2.Stream.eval(decoder.decode(responseLine).value)
+      result <- fs2.Stream.fromEither(decoded)
+    } yield result
 
   private def sendRequest(request: HttpRequest): F[stream.Stream[String]] =
     for {
