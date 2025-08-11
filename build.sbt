@@ -31,6 +31,8 @@ lazy val core = (project in file("core"))
       "org.typelevel" %% "cats-effect" % catsEffectVersion,
       // TODO: make it optional and/or for testing only
       "io.circe" %% "circe-core" % "0.14.14",
+      "io.circe" %% "circe-generic" % "0.14.14",
+      "io.circe" %% "circe-parser" % "0.14.14",
     ),
     libraryDependencies ++= {
       // scala version specific stuff
