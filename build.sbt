@@ -12,7 +12,13 @@ val fs2Version = "3.12.0"
 val catsEffectVersion = "3.6.3"
 
 lazy val commonSettings = Seq(
-  crossScalaVersions := supportedScalaVersions
+  crossScalaVersions := supportedScalaVersions,
+  libraryDependencies ++= {
+    CrossVersion.partialVersion(scalaVersion.value) match {
+      case Some((2, _)) => Seq(compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"))
+      case _            => Nil
+    }
+  }
 )
 
 lazy val root = (project in file("."))
@@ -31,18 +37,8 @@ lazy val core = (project in file("core"))
       "co.fs2" %% "fs2-core" % fs2Version,
       "co.fs2" %% "fs2-io"   % fs2Version,
       "org.typelevel" %% "cats-effect" % catsEffectVersion
-    ),
-    libraryDependencies ++= { // TODO: remove duplication
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        case Some((2, _)) =>
-          List(compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1" cross CrossVersion.binary))
-        case _ =>
-          Nil
-      }
-    }
-
-  ).enablePlugins()
-
+    )
+  )
 
 lazy val circe = (project in file("circe"))
   .settings(commonSettings)
@@ -52,30 +48,12 @@ lazy val circe = (project in file("circe"))
       "io.circe" %% "circe-core" % "0.14.14",
       "io.circe" %% "circe-generic" % "0.14.14",
       "io.circe" %% "circe-parser" % "0.14.14",
-    ),
-    libraryDependencies ++= {
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        case Some((2, _)) =>
-          List(compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1" cross CrossVersion.binary))
-        case _ =>
-          Nil
-      }
-    }
-
+    )
   ).dependsOn(core)
 
 lazy val examples = (project in file("examples"))
   .settings(commonSettings)
   .settings(
-    name := "examples",
-    libraryDependencies ++= {
-      CrossVersion.partialVersion(scalaVersion.value) match {
-        case Some((2, _)) =>
-          List(compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1" cross CrossVersion.binary))
-        case _ =>
-          Nil
-      }
-    }
-
+    name := "examples"
   ).dependsOn(core, circe)
 
