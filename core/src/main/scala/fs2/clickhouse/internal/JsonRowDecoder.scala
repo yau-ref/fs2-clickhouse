@@ -21,12 +21,28 @@ trait JsonRowDecoder[F[_], T] {
 object JsonRowDecoder {
 
   // TODO: impl and move to own sub project to keep pluggable
-  implicit def circeWrapper[F[_]: Sync, T: io.circe.Decoder]: JsonRowDecoder[F, T] = {
+
+  /** Conversion from existing circe decoder
+   *
+   * Example:
+   * {{{
+   *   import io.circe.generic.auto._
+   *   import JsonRowDecoder.circeWrapper
+   *
+   *   case class User(name: String, age: Int)
+   *
+   *   val stream =
+   *       fs2.Stream
+   *         .resource(ClickhouseStream.http[IO](host))
+   *         .flatMap(_.query[User]("select * from users"))
+   * }}}
+   *
+   */
+  implicit def circeWrapper[F[_]: Sync, T: io.circe.Decoder]: JsonRowDecoder[F, T] =
     new JsonRowDecoder[F, T] {
       override type Err = circe.Error
       override def decode(json: String): DecodedRow =
         EitherT(Sync[F].delay(circeDecode[T](json)))
     }
-  }
 
 }
