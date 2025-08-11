@@ -1,12 +1,19 @@
 package fs2.clickhouse.internal
 
 import cats.data.EitherT
+import io.circe
+
+import scala.annotation.implicitNotFound
+import scala.language.implicitConversions
+import io.circe.parser.{decode => circeDecode}
+import cats.effect.kernel.Sync
 
 // TODO: same for encoding
+@implicitNotFound("You should either implement row decoder or provide conversion from existing one")
 trait JsonRowDecoder[F[_], T] {
 
   type Err <: Throwable
-  type DecodedRow = EitherT[F, T, Err]
+  type DecodedRow = EitherT[F, Err, T]
   def decode(json: String): DecodedRow
 
 }
@@ -14,6 +21,12 @@ trait JsonRowDecoder[F[_], T] {
 object JsonRowDecoder {
 
   // TODO: impl and move to own sub project to keep pluggable
-  implicit def circeWrapper[F[_], T](): JsonRowDecoder[F, T] = ???
+  implicit def circeWrapper[F[_]: Sync, T: io.circe.Decoder]: JsonRowDecoder[F, T] = {
+    new JsonRowDecoder[F, T] {
+      override type Err = circe.Error
+      override def decode(json: String): DecodedRow =
+        EitherT(Sync[F].delay(circeDecode[T](json)))
+    }
+  }
 
 }
