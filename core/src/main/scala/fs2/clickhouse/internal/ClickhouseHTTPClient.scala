@@ -99,7 +99,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         .uri(uri)
         .expectContinue(true)
     val builderWithTimeout = withTimeout(builder, timeout)
-    val builderWithHeaders: F[HttpRequest.Builder] = withAuthHeaders(builderWithTimeout, auth)
+    val builderWithHeaders: F[HttpRequest.Builder] =
+      withAuthHeaders(builderWithTimeout, auth)
+      .map(_.header("X-ClickHouse-Format", "JSONEachRow"))
+      .map(_.header("Accept-Encoding", "gzip"))
+
     builderWithHeaders.map(_.build())
   }
 

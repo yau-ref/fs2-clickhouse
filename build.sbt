@@ -57,3 +57,17 @@ lazy val examples = (project in file("examples"))
     name := "examples"
   ).dependsOn(core, circe)
 
+lazy val tests = (project in file("tests"))
+  .settings(commonSettings)
+  .settings(
+    name := "tests",
+    libraryDependencies ++= Seq(
+      "org.scalactic" %% "scalactic" % "3.2.19",
+      "org.scalatest" %% "scalatest" % "3.2.19" % "it, test",
+      "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.43.0" % "it, test",
+      "com.dimafeng" %% "testcontainers-scala-clickhouse" % "0.43.0" % "it, test",
+      "com.clickhouse" % "clickhouse-jdbc" % "0.9.1" % "it, test"
+    ),
+
+  ).dependsOn(core, circe)
+
