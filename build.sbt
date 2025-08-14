@@ -51,12 +51,6 @@ lazy val circe = (project in file("circe"))
     )
   ).dependsOn(core)
 
-lazy val examples = (project in file("examples"))
-  .settings(commonSettings)
-  .settings(
-    name := "examples"
-  ).dependsOn(core, circe)
-
 lazy val tests = (project in file("tests"))
   .settings(commonSettings)
   .settings(
