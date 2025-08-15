@@ -25,7 +25,8 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   javaHttpClient: HttpClient,
   host: String,
   port: Int,
-  auth: Auth
+  auth: Auth,
+  compression: Compression
 ) extends ClickhouseClient[F] {
 
   private val requestReadChunkSize = 1
@@ -44,14 +45,12 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
 
   private def decompress(stream: fs2.Stream[F, Byte]): fs2.Stream[F, String] =
     stream
-      .through(fs2.io.compression.fs2ioCompressionForAsync[F].gunzip())
-      .flatMap[F, String](gzip =>
-        gzip.content.through(fs2.text.utf8.decode)
-          // decoded chunks could start and end in the middle of a line,
-          // dividing row into parts which should be merged before they reach decoding;
-          // fs2.text.lines does it well
-          .through(fs2.text.lines)
-      )
+      .through(compression.decompress)
+      // decoded chunks could start and end in the middle of a line,
+      // dividing row into parts which should be merged before they reach decoding;
+      // fs2.text.lines does it well
+      .through(fs2.text.utf8.decode)
+      .through(fs2.text.lines)
 
   private def sendRequest(request: HttpRequest): F[InputStream] =
     for {
@@ -115,7 +114,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       // JSONEachRowWithProgress allows getting progress data, would be cool
       // to take it and provide as a side-stream
       .map(_.header("X-ClickHouse-Format", "JSONEachRow"))
-      .map(_.header("Accept-Encoding", "gzip")) // TODO: this should be configurable
+      .map(_.header("Accept-Encoding", compression.acceptEncoding))
     builderWithHeaders.map(_.build())
   }
 
