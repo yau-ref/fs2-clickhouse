@@ -36,7 +36,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       bodyByteStream = bodyStream(request)
       bodyLine <- decompress(bodyByteStream) if bodyLine.nonEmpty
       decoded <- fs2.Stream.eval(decoder.decode(bodyLine).value)
-      result <- fs2.Stream.fromEither(decoded).handleErrorWith(_ => fs2.Stream.empty)
+      result <- fs2.Stream.fromEither(decoded)
     } yield result
 
   private def bodyStream(request: HttpRequest, chunkSize: Int = 100): fs2.Stream[F, Byte] =
