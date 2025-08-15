@@ -26,13 +26,22 @@ class BaseTest
     "read data" in withContainers { implicit clickHouseContainer =>
 
       case class User(name: String, age: Int)
+      val users =
+        (0 to 10000)
+          .map(i => User(s"user-$i", i % 100))
+          .toVector
 
       withConnection { connection =>
         val statement = connection.createStatement()
         statement.execute("create table users ( name text, age Int8) Engine = MergeTree() order by name")
-        statement.execute("insert into users values ('john', 32)")
-        statement.execute("insert into users values ('sam', 23)")
+        users.foreach( user =>
+          statement.execute(s"insert into users values ('${user.name}', ${user.age})")
+        )
       }
+      println("Inserted")
+
+//      println("http://localhost:" + clickHouseContainer.mappedPort(8123))
+//      Thread.sleep(10 * 60 * 1000)
 
       val result =
         fs2.Stream
@@ -47,7 +56,8 @@ class BaseTest
             clickhouse.query[User]("select * from test.users")
           ).compile.toList.unsafeRunSync()
 
-      result should contain allElementsOf List(User("john", 32), User("sam", 23))
+
+      result should contain allElementsOf users
     }
   }
 

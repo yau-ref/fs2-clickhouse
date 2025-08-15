@@ -6,14 +6,15 @@ import cats.syntax.apply._
 import cats.syntax.flatMap._
 import cats.syntax.functor._
 import fs2.Pipe
-import fs2.clickhouse.internal.ClickhouseHTTPClient.{ClickhousePasswordHeader, ClickhouseUserHeader}
+import fs2.clickhouse.internal.ClickhouseHTTPClient.{
+  ClickhousePasswordHeader,
+  ClickhouseUserHeader
+}
 
+import java.io.InputStream
 import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
-import java.time.{Duration => JDuration}
-import java.util.stream
 import scala.concurrent.duration.FiniteDuration
-import scala.jdk.CollectionConverters._
 import scala.util.control.NoStackTrace
 
 /**
@@ -31,24 +32,36 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
 
   override def query[T](q: String, timeout: Option[FiniteDuration] = None)(implicit decoder: JsonRowDecoder[F, T]): fs2.Stream[F, T] =
     for {
-      request <- fs2.Stream.eval(prepareRequest(q, auth, timeout))
-      responseStream: stream.Stream[String] <-
-        fs2.Stream.fromAutoCloseable(sendRequest(request))
-      itt = responseStream.iterator().asScala
-      responseLine <- fs2.Stream.fromBlockingIterator[F](itt, requestReadChunkSize)
-      decoded <- fs2.Stream.eval(decoder.decode(responseLine).value)
-      result <- fs2.Stream.fromEither(decoded)
+      request: HttpRequest <- fs2.Stream.eval(prepareRequest(q, auth, timeout))
+      bodyByteStream = bodyStream(request)
+      bodyLine <- decompress(bodyByteStream) if bodyLine.nonEmpty
+      decoded <- fs2.Stream.eval(decoder.decode(bodyLine).value)
+      result <- fs2.Stream.fromEither(decoded).handleErrorWith(_ => fs2.Stream.empty)
     } yield result
 
-  private def sendRequest(request: HttpRequest): F[stream.Stream[String]] =
+  private def bodyStream(request: HttpRequest, chunkSize: Int = 100): fs2.Stream[F, Byte] =
+    fs2.io.readInputStream[F](sendRequest(request), chunkSize)
+
+  private def decompress(stream: fs2.Stream[F, Byte]): fs2.Stream[F, String] =
+    stream
+      .through(fs2.io.compression.fs2ioCompressionForAsync[F].gunzip())
+      .flatMap[F, String](gzip =>
+        gzip.content.through(fs2.text.utf8.decode)
+          // decoded chunks could start and end in the middle of a line,
+          // dividing row into parts which should be merged before they reach decoding;
+          // fs2.text.lines does it well
+          .through(fs2.text.lines)
+      )
+
+  private def sendRequest(request: HttpRequest): F[InputStream] =
     for {
-      sent: HttpResponse[stream.Stream[String]] <-
+      sent: HttpResponse[InputStream] <-
         Async[F].blocking(
           javaHttpClient
-            .send[stream.Stream[String]](request, HttpResponse.BodyHandlers.ofLines())
+            .send(request, HttpResponse.BodyHandlers.ofInputStream())
         )
       status = sent.statusCode()
-      bodyStream: stream.Stream[String] <-
+      bodyStream <-
         if (status != 200)
           Async[F].delay(sent.body().close()) *>
             MonadError[F, Throwable]
@@ -59,8 +72,8 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           Async[F].delay(sent.body())
     } yield bodyStream
 
-  private def timeoutToJavaTime(timeout: FiniteDuration): JDuration =
-    JDuration.ofNanos(timeout.toNanos)
+  private def timeoutToJavaTime(timeout: FiniteDuration) =
+    java.time.Duration.ofNanos(timeout.toNanos)
 
   private def withTimeout(requestBuilder: HttpRequest.Builder, timeout: Option[FiniteDuration]) =
     timeout
@@ -87,11 +100,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     auth: Auth,
     timeout: Option[FiniteDuration]
   ): F[HttpRequest] = {
-
     // TODO: there's non-documented way to pass params via POST
     // https://github.com/ClickHouse/ClickHouse/issues/8842
-
-    val uri = new URI("http", "", host, port, "/", s"query=$q", "")
+    val uri = new URI("http", "", host, port, "/", s"enable_http_compression=1&query=$q", "")
     val builder =
       HttpRequest
         .newBuilder()
@@ -101,9 +112,10 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     val builderWithTimeout = withTimeout(builder, timeout)
     val builderWithHeaders: F[HttpRequest.Builder] =
       withAuthHeaders(builderWithTimeout, auth)
+      // JSONEachRowWithProgress allows getting progress data, would be cool
+      // to take it and provide as a side-stream
       .map(_.header("X-ClickHouse-Format", "JSONEachRow"))
-      .map(_.header("Accept-Encoding", "gzip"))
-
+      .map(_.header("Accept-Encoding", "gzip")) // TODO: this should be configurable
     builderWithHeaders.map(_.build())
   }
 
