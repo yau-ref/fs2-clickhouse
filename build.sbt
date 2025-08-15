@@ -22,7 +22,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val root = (project in file("."))
-  .aggregate(core, circe, examples)
+  .aggregate(core, circe)
   .settings(
     name := "fs2-clickhouse",
     crossScalaVersions := Nil,
