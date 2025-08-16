@@ -114,7 +114,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       // JSONEachRowWithProgress allows getting progress data, would be cool
       // to take it and provide as a side-stream
       .map(_.header("X-ClickHouse-Format", "JSONEachRow"))
-      .map(_.header("Accept-Encoding", compression.acceptEncoding))
+      .map( builder =>
+        compression
+          .acceptEncoding
+          .fold(builder)(builder.header("Accept-Encoding", _))
+      )
     builderWithHeaders.map(_.build())
   }
 
