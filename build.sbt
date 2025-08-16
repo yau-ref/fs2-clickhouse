@@ -57,6 +57,8 @@ lazy val lz4 = (project in file("lz4"))
     name := "fs2-clickhouse-lz4",
     libraryDependencies ++= Seq(
       // supports lz4 frame format with dependent blocks
+      // TODO: this lib is not lz4 specific and has zstd impl too,
+      //  maybe it makes sense to hav both of them in this module then
       "org.apache.commons" % "commons-compress" % "1.28.0"
     )
   ).dependsOn(core)
