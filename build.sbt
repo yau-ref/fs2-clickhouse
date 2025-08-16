@@ -56,7 +56,8 @@ lazy val lz4 = (project in file("lz4"))
   .settings(
     name := "fs2-clickhouse-lz4",
     libraryDependencies ++= Seq(
-      "org.lz4" % "lz4-java" % "1.8.0"
+      // supports lz4 frame format with dependent blocks
+      "org.apache.commons" % "commons-compress" % "1.28.0"
     )
   ).dependsOn(core)
 
@@ -72,5 +73,5 @@ lazy val tests = (project in file("tests"))
       "com.clickhouse" % "clickhouse-jdbc" % "0.9.1" % "it, test"
     ),
 
-  ).dependsOn(core, circe)
+  ).dependsOn(core, circe, lz4)
 
