@@ -22,7 +22,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val root = (project in file("."))
-  .aggregate(core, circe, tests)
+  .aggregate(core, circe, lz4, tests)
   .settings(
     name := "fs2-clickhouse",
     crossScalaVersions := Nil,
@@ -48,6 +48,15 @@ lazy val circe = (project in file("circe"))
       "io.circe" %% "circe-core" % "0.14.14",
       "io.circe" %% "circe-generic" % "0.14.14",
       "io.circe" %% "circe-parser" % "0.14.14",
+    )
+  ).dependsOn(core)
+
+lazy val lz4 = (project in file("lz4"))
+  .settings(commonSettings)
+  .settings(
+    name := "fs2-clickhouse-lz4",
+    libraryDependencies ++= Seq(
+      "org.lz4" % "lz4-java" % "1.8.0"
     )
   ).dependsOn(core)
 
