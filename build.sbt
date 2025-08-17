@@ -22,7 +22,7 @@ lazy val commonSettings = Seq(
 )
 
 lazy val root = (project in file("."))
-  .aggregate(core, circe, lz4, tests)
+  .aggregate(core, circe, compression, tests)
   .settings(
     name := "fs2-clickhouse",
     crossScalaVersions := Nil,
@@ -51,17 +51,15 @@ lazy val circe = (project in file("circe"))
     )
   ).dependsOn(core)
 
-lazy val lz4 = (project in file("lz4"))
+lazy val compression = (project in file("compression"))
   .settings(commonSettings)
   .settings(
-    name := "fs2-clickhouse-lz4",
+    name := "fs2-clickhouse-compression",
     libraryDependencies ++= Seq(
       // supports lz4 frame format with dependent blocks
-      // TODO: this lib is not lz4 specific and has zstd impl too,
-      //  maybe it makes sense to have both of them in this module then.
-      //  For now marking zstd-jni as optional
       "org.apache.commons" % "commons-compress" % "1.28.0",
-      "com.github.luben" % "zstd-jni" % "1.5.7-4" % Optional
+      // TODO: Consider having zstd as separate module
+      "com.github.luben" % "zstd-jni" % "1.5.7-4" /*% Optional*/
     )
   ).dependsOn(core)
 
@@ -75,7 +73,6 @@ lazy val tests = (project in file("tests"))
       "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.43.0" % "it, test",
       "com.dimafeng" %% "testcontainers-scala-clickhouse" % "0.43.0" % "it, test",
       "com.clickhouse" % "clickhouse-jdbc" % "0.9.1" % "it, test"
-    ),
-
-  ).dependsOn(core, circe, lz4)
+    )
+  ).dependsOn(core, circe, compression)
 
