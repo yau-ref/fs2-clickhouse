@@ -3,6 +3,9 @@ package fs2.clickhouse
 import com.dimafeng.testcontainers.ClickHouseContainer
 
 trait TestContainerHelpers {
+
+  val containerDef: ClickHouseContainer.Def =
+    ClickHouseContainer.Def()
   
   def httpApiPort(implicit clickHouseContainer: ClickHouseContainer): Int =
     clickHouseContainer.mappedPort(8123)

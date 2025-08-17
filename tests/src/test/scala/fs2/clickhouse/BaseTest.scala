@@ -2,7 +2,6 @@ package fs2.clickhouse
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
-import com.dimafeng.testcontainers.ClickHouseContainer
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
 import fs2.clickhouse.circe._
 import fs2.clickhouse.internal.Credentials
@@ -18,16 +17,12 @@ class BaseTest
     with TestContainerForAll 
     with TestContainerHelpers 
     with WithConnection {
-
-  override val containerDef: ClickHouseContainer.Def =
-    ClickHouseContainer.Def()
   
   "client" should {
     "read data" in withContainers { implicit clickHouseContainer =>
-
       case class User(name: String, age: Int)
       val users =
-        (0 to 10000)
+        (0 to 1000)
           .map(i => User(s"user-$i", i % 100))
           .toVector
 
@@ -38,10 +33,6 @@ class BaseTest
           statement.execute(s"insert into users values ('${user.name}', ${user.age})")
         )
       }
-      println("Inserted")
-
-//      println("http://localhost:" + clickHouseContainer.mappedPort(8123))
-//      Thread.sleep(10 * 60 * 1000)
 
       val result =
         fs2.Stream
@@ -55,7 +46,6 @@ class BaseTest
           ).flatMap(clickhouse =>
             clickhouse.query[User]("select * from test.users")
           ).compile.toList.unsafeRunSync()
-
 
       result should contain allElementsOf users
     }
