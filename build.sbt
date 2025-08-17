@@ -58,8 +58,10 @@ lazy val lz4 = (project in file("lz4"))
     libraryDependencies ++= Seq(
       // supports lz4 frame format with dependent blocks
       // TODO: this lib is not lz4 specific and has zstd impl too,
-      //  maybe it makes sense to hav both of them in this module then
-      "org.apache.commons" % "commons-compress" % "1.28.0"
+      //  maybe it makes sense to have both of them in this module then.
+      //  For now marking zstd-jni as optional
+      "org.apache.commons" % "commons-compress" % "1.28.0",
+      "com.github.luben" % "zstd-jni" % "1.5.7-4" % Optional
     )
   ).dependsOn(core)
 
