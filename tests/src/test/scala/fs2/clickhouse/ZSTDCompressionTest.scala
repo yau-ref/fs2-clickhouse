@@ -3,7 +3,7 @@ package fs2.clickhouse
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
-import fs2.clickhouse.internal.ZSTDCompression
+import fs.clickhouse.compression.zstd.ZSTDCompression
 import org.scalatest.Inspectors
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec

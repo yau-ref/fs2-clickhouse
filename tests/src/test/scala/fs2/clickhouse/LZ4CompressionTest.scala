@@ -2,11 +2,11 @@ package fs2.clickhouse
 
 import cats.effect.IO
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
-import fs2.clickhouse.internal.LZ4Compression
 import org.scalatest.Inspectors
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import cats.effect.unsafe.implicits.global
+import fs.clickhouse.compression.lz4.LZ4Compression
 
 class LZ4CompressionTest
   extends AnyWordSpec
