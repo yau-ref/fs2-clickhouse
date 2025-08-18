@@ -1,9 +1,9 @@
-package fs2.clickhouse
+package fs2.clickhouse.compression
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
-import compression.ZSTD
+import fs2.clickhouse.{TestContainerHelpers, WithConnection}
 import org.scalatest.Inspectors
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec

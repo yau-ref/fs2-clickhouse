@@ -1,6 +1,7 @@
-package fs2.clickhouse
+package fs2.clickhouse.compression
 
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
+import fs2.clickhouse.{TestContainerHelpers, WithConnection}
 import org.scalatest.Inspectors
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
