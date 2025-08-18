@@ -1,15 +1,15 @@
-package fs.clickhouse.compression.zstd
+package fs2.clickhouse.compression.zstd
 
 import cats.effect.Async
 import fs2.Pipe
-import fs2.clickhouse.internal.{Compression, ZSTDCompression}
+import fs2.clickhouse.internal.Compression
 import fs2.io.{readInputStream, toInputStream}
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream
 
 import java.io.InputStream
 
 // TODO: set better default block size
-class ZSTDCompression(chunkSize: Int = 1000) extends Compression {
+class ZSTDCompression private (chunkSize: Int = 1000) extends Compression {
 
   override def acceptEncoding: Option[String] = Some("zstd")
 
@@ -30,5 +30,7 @@ class ZSTDCompression(chunkSize: Int = 1000) extends Compression {
 object ZSTDCompression {
 
   lazy val defaultInstance = new ZSTDCompression
+
+  def apply(chunkSize: Int): Compression = new ZSTDCompression(chunkSize)
 
 }

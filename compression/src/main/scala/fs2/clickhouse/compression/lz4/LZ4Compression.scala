@@ -1,15 +1,15 @@
-package fs.clickhouse.compression.lz4
+package fs2.clickhouse.compression.lz4
 
 import cats.effect.Async
 import fs2.Pipe
-import fs2.clickhouse.internal.{Compression, LZ4Compression}
+import fs2.clickhouse.internal.Compression
 import fs2.io.{readInputStream, toInputStream}
 import org.apache.commons.compress.compressors.lz4.FramedLZ4CompressorInputStream
 
 import java.io.InputStream
 
 // TODO: set better default block size
-class LZ4Compression(chunkSize: Int = 1000) extends Compression {
+class LZ4Compression private (chunkSize: Int = 1000) extends Compression {
 
   override def acceptEncoding: Option[String] = Some("lz4")
 
@@ -33,5 +33,7 @@ class LZ4Compression(chunkSize: Int = 1000) extends Compression {
 object LZ4Compression {
 
   lazy val defaultInstance = new LZ4Compression
+
+  def apply(chunkSize: Int): Compression = new LZ4Compression(chunkSize)
 
 }

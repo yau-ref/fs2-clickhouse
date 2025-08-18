@@ -6,7 +6,7 @@ import org.scalatest.Inspectors
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import cats.effect.unsafe.implicits.global
-import fs.clickhouse.compression.lz4.LZ4Compression
+import compression.LZ4
 
 class LZ4CompressionTest
   extends AnyWordSpec
@@ -18,11 +18,7 @@ class LZ4CompressionTest
 
   "LZ4Compression" should {
     "compress data" in {
-      val pipe =
-        LZ4Compression
-          .defaultInstance
-          .decompress[IO]
-
+      val pipe = LZ4.decompress[IO]
       val testData = "BCJNGGRApwsAAIBoZWxsb3dvcmxkCgAAAADxpNsz"
       val decoded =
         fs2.Stream

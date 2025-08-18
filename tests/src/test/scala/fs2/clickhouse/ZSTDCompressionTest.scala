@@ -3,7 +3,7 @@ package fs2.clickhouse
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
-import fs.clickhouse.compression.zstd.ZSTDCompression
+import compression.ZSTD
 import org.scalatest.Inspectors
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -18,11 +18,7 @@ class ZSTDCompressionTest
 
   "ZSTDCompressions" should {
     "compress data" in {
-      val pipe =
-        ZSTDCompression
-          .defaultInstance
-          .decompress[IO]
-
+      val pipe = ZSTD.decompress[IO]
       val testData = "KLUv/QRYWQAAaGVsbG93b3JsZAp/WzH0"
       val decoded =
         fs2.Stream
