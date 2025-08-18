@@ -12,6 +12,6 @@ object NoCompression extends Compression {
 
   override def decompress[F[_] : Async]: Pipe[F, Byte, Byte] = identity
 
-  override def compress[F[_] : Async]: Pipe[F, Byte, Byte] = ???
+  override def compress[F[_] : Async]: Pipe[F, Byte, Byte] = identity
 
 }
