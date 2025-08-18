@@ -1,6 +1,8 @@
 package fs2.clickhouse.internal
 
 import cats.effect.{Async, Resource}
+import fs2.clickhouse.compression.{Compression, GZIP}
+
 import java.net.http.HttpClient
 
 object ClickhouseStream {

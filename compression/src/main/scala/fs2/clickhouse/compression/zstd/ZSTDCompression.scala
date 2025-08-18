@@ -2,7 +2,7 @@ package fs2.clickhouse.compression.zstd
 
 import cats.effect.Async
 import fs2.Pipe
-import fs2.clickhouse.internal.Compression
+import fs2.clickhouse.compression.Compression
 import fs2.io.{readInputStream, toInputStream}
 import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream
 

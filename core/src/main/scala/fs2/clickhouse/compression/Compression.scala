@@ -1,4 +1,4 @@
-package fs2.clickhouse.internal
+package fs2.clickhouse.compression
 
 import cats.effect.Async
 import fs2.Pipe

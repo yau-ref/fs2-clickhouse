@@ -6,10 +6,8 @@ import cats.syntax.apply._
 import cats.syntax.flatMap._
 import cats.syntax.functor._
 import fs2.Pipe
-import fs2.clickhouse.internal.ClickhouseHTTPClient.{
-  ClickhousePasswordHeader,
-  ClickhouseUserHeader
-}
+import fs2.clickhouse.compression.Compression
+import fs2.clickhouse.internal.ClickhouseHTTPClient.{ClickhousePasswordHeader, ClickhouseUserHeader}
 
 import java.io.InputStream
 import java.net.URI

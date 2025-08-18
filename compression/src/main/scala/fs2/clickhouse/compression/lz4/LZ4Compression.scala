@@ -2,7 +2,7 @@ package fs2.clickhouse.compression.lz4
 
 import cats.effect.Async
 import fs2.Pipe
-import fs2.clickhouse.internal.Compression
+import fs2.clickhouse.compression.Compression
 import fs2.io.{readInputStream, toInputStream}
 import org.apache.commons.compress.compressors.lz4.FramedLZ4CompressorInputStream
 
