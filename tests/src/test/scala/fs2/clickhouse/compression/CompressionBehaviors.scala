@@ -23,19 +23,28 @@ trait CompressionBehaviors {
     samplePreCompressedData: String
   ) = {
 
-    "decompress pre-compressed data" in {
+    "decompress pre-compressed data" in
       // Checks whether provided compression is actually capable of decompression the data
       // by applying it to sample pre-compressed data known to be valid
-      val pipe = compression.decompress[IO]
       fs2.Stream
         .emits(List(samplePreCompressedData))
         .through(fs2.text.base64.decode[IO])
-        .through(pipe)
+        .through(compression.decompress[IO])
         .compile
         .toVector
         .map(bytes => new String(bytes.toArray))
         .map(_ shouldBe sampleData)
-    }
+
+    "throw exception if garbage in" in
+      // TODO: wrap exception in some lib specific for easier handling
+      assertThrows[Exception] {
+        fs2.Stream
+          .emits(scala.util.Random.nextString(256).getBytes())
+          .through(compression.decompress[IO])
+          .compile
+          .drain
+          .unsafeRunSync()
+      }
 
   }
 
