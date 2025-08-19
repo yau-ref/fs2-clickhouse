@@ -1,20 +1,26 @@
 package fs2.clickhouse.compression
 
-import cats.effect.unsafe.implicits.global
+import cats.effect.testing.scalatest.AsyncIOSpec
+import com.dimafeng.testcontainers.scalatest.TestContainerForAll
+import fs2.clickhouse.{TestContainerHelpers, WithConnection}
 import org.scalatest.Inspectors
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AnyWordSpec
+import org.scalatest.wordspec.AsyncWordSpec
 
 class GZIPCompressionTest
-  extends AnyWordSpec
-    with SimpleDecompressionTest
+  extends AsyncWordSpec
+    with AsyncIOSpec
     with Matchers
-    with Inspectors {
-
-  "GZIPCompressions" should {
-    "decompress data" in 
-      simpleDecompressionTest(GZIP, "H4sIAAAAAAAAA8tIzcnJL88vyknhAgDmMkmaCwAAAA==", "helloworld\n")
+    with Inspectors
+    with TestContainerForAll
+    with TestContainerHelpers
+    with WithConnection
+    with CompressionBehaviors {
+  
+  "GZIPCompression" should {
+    behave like decompressionBehavior(GZIP, "helloworld\n", "H4sIAAAAAAAAA8tIzcnJL88vyknhAgDmMkmaCwAAAA==")
+    behave like integratedDecompressionBehavior(GZIP)
   }
-
+  
 }
 

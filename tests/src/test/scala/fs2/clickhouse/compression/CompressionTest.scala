@@ -14,12 +14,8 @@ class CompressionTest
     with TestContainerHelpers
     with WithConnection {
 
-  // checks compressions:
-  // 1. compressions should use correct accept-types
-  // 2. pipes should really compress/decompress
-  // 3. compression should actually work with ch 
-
   // check integration:
+  // 0. compressions should use correct accept-types
   // 1. the client actually uses compression if provided
   // 2. ch returns and accepts compressed data
   // 3. http client correctly handles wrong compression types
