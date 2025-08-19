@@ -3,6 +3,7 @@ package fs2.clickhouse
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
+import fs2.clickhouse.TestData.User
 import fs2.clickhouse.circe._
 import fs2.clickhouse.internal.Credentials
 import io.circe.generic.auto._
@@ -20,11 +21,7 @@ class BaseTest
   
   "client" should {
     "read data" in withContainers { implicit clickHouseContainer =>
-      case class User(name: String, age: Int)
-      val users =
-        (0 to 1000)
-          .map(i => User(s"user-$i", i % 100))
-          .toVector
+      val users = TestData.users()
 
       withConnection { connection =>
         val statement = connection.createStatement()
