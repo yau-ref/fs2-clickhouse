@@ -7,13 +7,13 @@ import cats.syntax.flatMap._
 import cats.syntax.functor._
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
-import fs2.clickhouse.internal.ClickhouseHTTPClient.{ClickhousePasswordHeader, ClickhouseUserHeader}
+import fs2.clickhouse.internal.ClickhouseHTTPClient.{ClickhousePasswordHeader, ClickhouseUserHeader, FS2CHDecompressionException}
 
 import java.io.InputStream
 import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import scala.concurrent.duration.FiniteDuration
-import scala.util.control.NoStackTrace
+import scala.util.control.{NoStackTrace, NonFatal}
 
 /**
  * Implements Clickhouse HTTP API
@@ -44,6 +44,15 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   private def decompress(stream: fs2.Stream[F, Byte]): fs2.Stream[F, String] =
     stream
       .through(compression.decompress)
+      .handleErrorWith {
+        case e: FS2CHDecompressionException =>
+          fs2.Stream.raiseError(e)
+        case e =>
+          // decompressors are expected to be polite
+          // and wrap errors by FS2CHDecompressionException
+          // but let's be realistic :)
+          fs2.Stream.raiseError(new FS2CHDecompressionException(e))
+      }
       // decoded chunks could start and end in the middle of a line,
       // dividing row into parts which should be merged before they reach decoding;
       // fs2.text.lines does it well
@@ -129,5 +138,16 @@ object ClickhouseHTTPClient {
 
   private val ClickhouseUserHeader = "X-ClickHouse-User"
   private val ClickhousePasswordHeader = "X-ClickHouse-Key"
-  
+
+  // TODO: would be cool to have info about query here
+  // TODO: move it to better place
+  class FS2ClickhouseException(
+    message: String,
+    cause: Option[Throwable] = None
+  ) extends Exception(message, cause.orNull)
+
+  class FS2CHDecompressionException(cause: Throwable)
+    extends FS2ClickhouseException(s"Decompression failed: ${cause.getMessage}", Some(cause))
+    with NoStackTrace
+
 }
