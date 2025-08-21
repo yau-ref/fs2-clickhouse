@@ -4,14 +4,16 @@ import cats.effect.Async
 import cats.syntax.all._
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
-import fs2.clickhouse.internal.ClickhouseHTTPClient.{ClickhousePasswordHeader, ClickhouseUserHeader, FS2CHConnectionException, FS2CHDecompressionException, FS2CHQueryFailed, FS2ClickhouseException}
+import fs2.clickhouse.exceptions._
+import fs2.clickhouse.internal.ClickhouseHTTPClient.{
+  ClickhousePasswordHeader,
+  ClickhouseUserHeader
+}
 
 import java.io.InputStream
-import java.net.URI
-import java.net.ConnectException
+import java.net.{ConnectException, URI}
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import scala.concurrent.duration.FiniteDuration
-import scala.util.control.NoStackTrace
 /**
  * Implements Clickhouse HTTP API
  * https://clickhouse.com/docs/en/interfaces/http
@@ -141,33 +143,5 @@ object ClickhouseHTTPClient {
 
   private val ClickhouseUserHeader = "X-ClickHouse-User"
   private val ClickhousePasswordHeader = "X-ClickHouse-Key"
-
-  // TODO: would be cool to have info about query here
-  // TODO: move it to better place
-  class FS2ClickhouseException(
-    message: String,
-    cause: Option[Throwable]
-  ) extends Exception(message, cause.orNull)
-
-  object FS2ClickhouseException {
-    def apply(message: String, cause: Throwable) =
-      new FS2ClickhouseException(message, Some(cause))
-
-    def apply(message: String) =
-        new FS2ClickhouseException(message, None)
-  }
-
-  case class FS2CHDecompressionException(cause: Throwable)
-    extends FS2ClickhouseException(s"Decompression failed", Some(cause))
-      with NoStackTrace
-
-  case class FS2CHConnectionException(cause: ConnectException)
-    extends FS2ClickhouseException("Failed to connect to Clickhouse HTTP Api", Some(cause))
-      with NoStackTrace
-
-  // TODO: need more info in here
-  case class FS2CHQueryFailed(statusCode: Int)
-    extends FS2ClickhouseException(s"Query execution failed, status code = $statusCode", None)
-      with NoStackTrace
 
 }
