@@ -1,20 +1,24 @@
 package fs2.clickhouse.internal
 
-import cats.MonadError
 import cats.effect.Async
+import cats.syntax.all._
 import cats.syntax.apply._
 import cats.syntax.flatMap._
 import cats.syntax.functor._
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
-import fs2.clickhouse.internal.ClickhouseHTTPClient.{ClickhousePasswordHeader, ClickhouseUserHeader, FS2CHDecompressionException}
+import fs2.clickhouse.internal.ClickhouseHTTPClient.{
+  ClickhousePasswordHeader,
+  ClickhouseUserHeader,
+  FS2CHDecompressionException,
+  FS2ClickhouseException
+}
 
 import java.io.InputStream
 import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import scala.concurrent.duration.FiniteDuration
-import scala.util.control.{NoStackTrace, NonFatal}
-
+import scala.util.control.NoStackTrace
 /**
  * Implements Clickhouse HTTP API
  * https://clickhouse.com/docs/en/interfaces/http
@@ -45,7 +49,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     stream
       .through(compression.decompress)
       .handleErrorWith {
-        case e: FS2CHDecompressionException =>
+        case e: FS2ClickhouseException =>
           fs2.Stream.raiseError(e)
         case e =>
           // decompressors are expected to be polite
@@ -63,20 +67,26 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     for {
       sent: HttpResponse[InputStream] <-
         Async[F].blocking(
-          javaHttpClient
-            .send(request, HttpResponse.BodyHandlers.ofInputStream())
+          javaHttpClient.send(request, HttpResponse.BodyHandlers.ofInputStream())
+        ).handleErrorWith( e =>
+          // TODO: make it detailed
+          Async[F].raiseError(
+            new FS2ClickhouseException("Request to Clickhouse HTTP API failed", Some(e))
+          )
         )
+
       status = sent.statusCode()
+
       bodyStream <-
         if (status != 200)
           Async[F].delay(sent.body().close()) *>
-            MonadError[F, Throwable]
-              .raiseError(new IllegalArgumentException(s"Response code was not 200: ${status}") with NoStackTrace)
+            Async[F].raiseError(new IllegalArgumentException(s"Response code was not 200: ${status}") with NoStackTrace)
         else
           // TODO: response code 200 does not guarantee that a query was executed successfully
           // https://clickhouse.com/docs/interfaces/http#http_response_codes_caveats
           Async[F].delay(sent.body())
     } yield bodyStream
+
 
   private def timeoutToJavaTime(timeout: FiniteDuration) =
     java.time.Duration.ofNanos(timeout.toNanos)
