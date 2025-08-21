@@ -2,20 +2,13 @@ package fs2.clickhouse.internal
 
 import cats.effect.Async
 import cats.syntax.all._
-import cats.syntax.apply._
-import cats.syntax.flatMap._
-import cats.syntax.functor._
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
-import fs2.clickhouse.internal.ClickhouseHTTPClient.{
-  ClickhousePasswordHeader,
-  ClickhouseUserHeader,
-  FS2CHDecompressionException,
-  FS2ClickhouseException
-}
+import fs2.clickhouse.internal.ClickhouseHTTPClient.{ClickhousePasswordHeader, ClickhouseUserHeader, FS2CHConnectionException, FS2CHDecompressionException, FS2CHQueryFailed, FS2ClickhouseException}
 
 import java.io.InputStream
 import java.net.URI
+import java.net.ConnectException
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NoStackTrace
@@ -68,19 +61,19 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       sent: HttpResponse[InputStream] <-
         Async[F].blocking(
           javaHttpClient.send(request, HttpResponse.BodyHandlers.ofInputStream())
-        ).handleErrorWith( e =>
-          // TODO: make it detailed
-          Async[F].raiseError(
-            new FS2ClickhouseException("Request to Clickhouse HTTP API failed", Some(e))
-          )
-        )
-
-      status = sent.statusCode()
-
+        ).handleErrorWith{
+          case e: ConnectException =>
+            FS2CHConnectionException(e)
+              .raiseError
+          case e =>
+            FS2ClickhouseException("Request to Clickhouse HTTP API failed", e)
+              .raiseError
+        }
+      status: Int = sent.statusCode()
       bodyStream <-
         if (status != 200)
           Async[F].delay(sent.body().close()) *>
-            Async[F].raiseError(new IllegalArgumentException(s"Response code was not 200: ${status}") with NoStackTrace)
+            FS2CHQueryFailed(status).raiseError
         else
           // TODO: response code 200 does not guarantee that a query was executed successfully
           // https://clickhouse.com/docs/interfaces/http#http_response_codes_caveats
@@ -153,11 +146,28 @@ object ClickhouseHTTPClient {
   // TODO: move it to better place
   class FS2ClickhouseException(
     message: String,
-    cause: Option[Throwable] = None
+    cause: Option[Throwable]
   ) extends Exception(message, cause.orNull)
 
-  class FS2CHDecompressionException(cause: Throwable)
-    extends FS2ClickhouseException(s"Decompression failed: ${cause.getMessage}", Some(cause))
-    with NoStackTrace
+  object FS2ClickhouseException {
+    def apply(message: String, cause: Throwable) =
+      new FS2ClickhouseException(message, Some(cause))
+
+    def apply(message: String) =
+        new FS2ClickhouseException(message, None)
+  }
+
+  case class FS2CHDecompressionException(cause: Throwable)
+    extends FS2ClickhouseException(s"Decompression failed", Some(cause))
+      with NoStackTrace
+
+  case class FS2CHConnectionException(cause: ConnectException)
+    extends FS2ClickhouseException("Failed to connect to Clickhouse HTTP Api", Some(cause))
+      with NoStackTrace
+
+  // TODO: need more info in here
+  case class FS2CHQueryFailed(statusCode: Int)
+    extends FS2ClickhouseException(s"Query execution failed, status code = $statusCode", None)
+      with NoStackTrace
 
 }
