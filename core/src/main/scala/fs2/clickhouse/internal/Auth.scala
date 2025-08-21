@@ -12,11 +12,11 @@ case object FromEnv extends Auth
 case class Credentials(user: String, password: Option[String]) extends Auth
 
 object Auth {
-  
+
   private val ClickhouseUserEnv = "CLICKHOUSE_USER"
   private val ClickhousePasswordEnv = "CLICKHOUSE_PASSWORD"
 
-  def fromEnv[F[_]: Sync]: F[Credentials] = 
+  def fromEnv[F[_]: Sync]: F[Credentials] =
     for {
       env <- Sync[F].pure(Env.make[F])
       maybeUser <- env.get(ClickhouseUserEnv)
@@ -24,7 +24,9 @@ object Auth {
       user <-
         Sync[F].fromOption(
           maybeUser,
-          new IllegalArgumentException(s"Clickhouse user name is not in $ClickhouseUserEnv") with NoStackTrace
+          new IllegalArgumentException(
+            s"Clickhouse user name is not in $ClickhouseUserEnv"
+          ) with NoStackTrace
         )
     } yield Credentials(user, maybePassword)
 

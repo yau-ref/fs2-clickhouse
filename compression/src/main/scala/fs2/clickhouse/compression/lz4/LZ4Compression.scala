@@ -15,18 +15,16 @@ class LZ4Compression private (chunkSize: Int = 1000) extends Compression {
 
   // Clickhouse uses lz4 frame format with dependent blocks
   // https://github.com/ClickHouse/ClickHouse/blob/master/src/IO/Lz4DeflatingWriteBuffer.cpp
-  override def decompress[F[_] : Async]: Pipe[F, Byte, Byte] =
-    _
-      .through(toInputStream[F])
-      .flatMap { inputStream =>
-        val decompressed: F[InputStream] =
-          Async[F].delay({
-            new FramedLZ4CompressorInputStream(inputStream) // not thread safe
-          })
-        readInputStream[F](decompressed, chunkSize)
-      }
+  override def decompress[F[_]: Async]: Pipe[F, Byte, Byte] =
+    _.through(toInputStream[F]).flatMap { inputStream =>
+      val decompressed: F[InputStream] =
+        Async[F].delay(
+          new FramedLZ4CompressorInputStream(inputStream) // not thread safe
+        )
+      readInputStream[F](decompressed, chunkSize)
+    }
 
-  override def compress[F[_] : Async]: Pipe[F, Byte, Byte] = ???
+  override def compress[F[_]: Async]: Pipe[F, Byte, Byte] = ???
 
 }
 

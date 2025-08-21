@@ -4,10 +4,9 @@ import cats.effect.Async
 import fs2.Pipe
 import fs2.io.compression.fs2ioCompressionForAsync
 
-/**
- * The simplest one, requires no extra dependencies
- * so could be a part of the core 
- */
+/** The simplest one, requires no extra dependencies so could be a part of the
+  * core
+  */
 object GZIP extends Compression {
 
   override val acceptEncoding: Option[String] = Some("gzip")
