@@ -12,8 +12,8 @@ import scala.language.implicitConversions
 )
 trait JsonRowDecoder[F[_], T] {
 
-  type Err <: Throwable
-  type DecodedRow = EitherT[F, Err, T]
+  type Err <: Throwable // TODO: should consider dropping this as there's no benefit but it does complicate stuff 
+  type DecodedRow = EitherT[F, Err, T] 
   def decode(json: String): DecodedRow
 
 }
