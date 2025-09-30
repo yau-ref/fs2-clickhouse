@@ -27,9 +27,9 @@ case class FS2CHConnectionException(cause: ConnectException)
     with NoStackTrace
 
 // TODO: need more info in here
-case class FS2CHQueryFailed(statusCode: Int)
+case class FS2CHQueryFailed(statusCode: Int, message: String)
     extends FS2ClickhouseException(
-      s"Query execution failed, status code = $statusCode",
+      s"Query execution failed, status code = $statusCode: $message",
       None
     )
     with NoStackTrace
