@@ -1,14 +1,12 @@
 package fs2.clickhouse.internal
 
+import cats.data.EitherT
 import cats.effect.Async
 import cats.syntax.all._
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
 import fs2.clickhouse.exceptions._
-import fs2.clickhouse.internal.ClickhouseHTTPClient.{
-  ClickhousePasswordHeader,
-  ClickhouseUserHeader
-}
+import fs2.clickhouse.internal.ClickhouseHTTPClient.{ClickhousePasswordHeader, ClickhouseUserHeader, ErrorMessage, Http, errorDecoder}
 
 import java.io.InputStream
 import java.net.{ConnectException, URI}
@@ -25,25 +23,31 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   auth: Auth,
   compression: Compression
 ) extends ClickhouseClient[F] {
-
+  
   private val requestReadChunkSize = 1
+  private val chunkSize = 100
 
   override def query[T](q: String, timeout: Option[FiniteDuration] = None)(
     implicit decoder: JsonRowDecoder[F, T]
   ): fs2.Stream[F, T] =
     for {
       request: HttpRequest <- fs2.Stream.eval(prepareRequest(q, auth, timeout))
-      bodyByteStream = bodyStream(request)
-      bodyLine <- decompress(bodyByteStream) if bodyLine.nonEmpty
-      decoded <- fs2.Stream.eval(decoder.decode(bodyLine).value)
-      result <- fs2.Stream.fromEither(decoded)
-    } yield result
-
-  private def bodyStream(
-    request: HttpRequest,
-    chunkSize: Int = 100
-  ): fs2.Stream[F, Byte] =
-    fs2.io.readInputStream[F](sendRequest(request), chunkSize)
+      response: HttpResponse[InputStream] <- fs2.Stream.eval(sendRequest(request))
+      status = response.statusCode()
+      bodyByteStream = fs2.io.readInputStream[F](Async[F].delay(response.body()), chunkSize)
+      bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
+      // TODO: if status != 200 then set decoder to be just err else set a combination
+      decodedElement <-
+        if (status != Http.Ok)
+          readErrorAndDrain(bodyLineStream)
+        else {
+          // TODO: 200 != all good, need to handle errors here too
+          bodyLineStream
+            .map(decoder.decode)
+            .evalMap(_.value)
+            .flatMap(decoded => fs2.Stream.fromEither(decoded))
+        }
+    } yield decodedElement
 
   private def decompress(stream: fs2.Stream[F, Byte]): fs2.Stream[F, String] =
     stream
@@ -63,33 +67,37 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       .through(fs2.text.utf8.decode)
       .through(fs2.text.lines)
 
-  private def sendRequest(request: HttpRequest): F[InputStream] =
+  private def sendRequest(request: HttpRequest): F[HttpResponse[InputStream]] =
+    Async[F]
+      .blocking(
+        javaHttpClient
+          .send(request, HttpResponse.BodyHandlers.ofInputStream())
+      )
+      .handleErrorWith {
+        case e: ConnectException =>
+          FS2CHConnectionException(e).raiseError
+        case e =>
+          FS2ClickhouseException(
+            "Request to Clickhouse HTTP API failed",
+            e
+          ).raiseError
+      }
+
+  /**
+   *  If it's not 200 let's read the rest of body and try to decode it
+   */
+  private def readErrorAndDrain(bodyInputStream: fs2.Stream[F, String]): fs2.Stream[F, Nothing] =
     for {
-      sent: HttpResponse[InputStream] <-
-        Async[F]
-          .blocking(
-            javaHttpClient
-              .send(request, HttpResponse.BodyHandlers.ofInputStream())
-          )
-          .handleErrorWith {
-            case e: ConnectException =>
-              FS2CHConnectionException(e).raiseError
-            case e =>
-              FS2ClickhouseException(
-                "Request to Clickhouse HTTP API failed",
-                e
-              ).raiseError
-          }
-      status: Int = sent.statusCode()
-      bodyStream <-
-        if (status != 200)
-          Async[F].delay(sent.body().close()) *>
-            FS2CHQueryFailed(status).raiseError
-        else
-          // TODO: response code 200 does not guarantee that a query was executed successfully
-          // https://clickhouse.com/docs/interfaces/http#http_response_codes_caveats
-          Async[F].delay(sent.body())
-    } yield bodyStream
+      errors: List[String] <- fs2.Stream.eval(bodyInputStream.compile.toList)
+      firstErr = errors.head
+      // TODO: use error decoder
+      //   errDec.decode(bodyLine)
+      nope <- fs2.Stream.raiseError(FS2CHQueryFailed(0, s"Booom! $firstErr"))
+    } yield nope
+
+  // TODO: let's make a compositional decoder which first tries to decode product and if fails proceeds to
+  //  decoding error (or visa versa); Also it should not just decoder errors but meta info too (and for now ignore it)
+  private val errDec: JsonRowDecoder[F, ErrorMessage] = errorDecoder[F]
 
   private def timeoutToJavaTime(timeout: FiniteDuration) =
     java.time.Duration.ofNanos(timeout.toNanos)
@@ -146,8 +154,8 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     val builderWithTimeout = withTimeout(builder, timeout)
     val builderWithHeaders: F[HttpRequest.Builder] =
       withAuthHeaders(builderWithTimeout, auth)
-        // JSONEachRowWithProgress allows getting progress data, would be cool
-        // to take it and provide as a side-stream
+        // TODO: JSONEachRowWithProgress allows getting progress data, would be cool
+        //   to take it and provide as a side-stream
         .map(_.header("X-ClickHouse-Format", "JSONEachRow"))
         .map(builder =>
           compression.acceptEncoding
@@ -162,7 +170,22 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
 
 object ClickhouseHTTPClient {
 
+  object Http {
+    val Ok = 200
+    val BadRequest = 400
+  }
+
   private val ClickhouseUserHeader = "X-ClickHouse-User"
   private val ClickhousePasswordHeader = "X-ClickHouse-Key"
+
+  def errorDecoder[F[_]: Async]: JsonRowDecoder[F, ErrorMessage] =
+    new JsonRowDecoder[F, ErrorMessage] {
+      override def decode(json: String): DecodedRow =
+        EitherT.right(
+          ErrorMessage(json).pure[F]
+        )
+    }
+
+  case class ErrorMessage(error: String)
 
 }
