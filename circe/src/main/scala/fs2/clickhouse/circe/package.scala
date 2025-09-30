@@ -25,8 +25,6 @@ package object circe {
   implicit def circeDecoderWrapper[F[_]: Sync, T: circe.Decoder]
     : JsonRowDecoder[F, T] =
     new JsonRowDecoder[F, T] {
-      override type Err = circe.Error
-
       override def decode(json: String): DecodedRow =
         EitherT(Sync[F].delay(circe.parser.decode[T](json)))
     }
