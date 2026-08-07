@@ -5,6 +5,7 @@ import cats.effect.unsafe.implicits.global
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
 import fs2.clickhouse.TestData.User
 import fs2.clickhouse.circe._
+import fs2.clickhouse.compression.NoCompression
 import fs2.clickhouse.internal.Credentials
 import io.circe.generic.auto._
 import org.scalatest._
@@ -38,10 +39,18 @@ class BaseTest
               .http[IO](
                 hostName,
                 httpApiPort,
-                Credentials(username, Some(password))
+                Credentials(username, Some(password)),
+                compression = NoCompression
               )
           ).flatMap(clickhouse =>
-            clickhouse.query[User]("select * from test.users")
+            clickhouse
+              .query[User]("select from test.users")
+              .handleErrorWith(err => {
+                fs2.Stream.eval(IO.println(s"OW! ${err}"))
+                  .flatMap(_ => fs2.Stream.empty)
+
+              })
+
           ).compile.toList.unsafeRunSync()
 
       result should contain allElementsOf users
