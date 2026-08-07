@@ -6,7 +6,6 @@ import cats.effect.Async
 import scala.annotation.implicitNotFound
 import scala.language.implicitConversions
 
-// TODO: same for encoding
 @implicitNotFound(
   "You should either implement row decoder or provide conversion from existing one"
 )
