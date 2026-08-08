@@ -19,7 +19,7 @@ import java.io.InputStream
 import java.net.{ConnectException, URI}
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration.{FiniteDuration, DurationInt}
 
 /** Implements Clickhouse HTTP API
   * https://clickhouse.com/docs/en/interfaces/http
@@ -225,25 +225,45 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       stream.map(encoder.encode).evalMap(_.value)
 
   override def insert[T](
-    statement: String
+    statement: String,
+    maxBatchSize: Int = 1000,
+    maxBatchWait: FiniteDuration = 1.second
   )(implicit encoder: JsonRowEncoder[F, T]): Pipe[F, T, Nothing] =
     stream =>
-      for {
-        requestBuilder <- fs2.Stream.eval(prepareInsertRequest(auth))
-        compressedStream = compress(insertBodyLines(statement, stream))
-        publisher <- fs2.Stream.resource(bodyPublisher(compressedStream))
-        request = requestBuilder.POST(publisher).build()
-        response <- fs2.Stream.eval(sendRequest(request))
-        status = response.statusCode()
-        bodyByteStream =
-          fs2.io.readInputStream[F](Async[F].delay(response.body()), chunkSize)
-        bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
-        result <-
-          if (status != Http.Ok)
-            readErrorAndDrain(bodyLineStream)
-          else
-            bodyLineStream.drain
-      } yield result
+      stream
+        .groupWithin(maxBatchSize, maxBatchWait)
+        .evalMap(batch => insertBatch(statement, fs2.Stream.chunk(batch)))
+        .drain
+
+  // sends a single batch as one HTTP request and drains/decodes its response;
+  // used to send one request per batch produced by `groupWithin` in `insert`
+  private def insertBatch[T](
+    statement: String,
+    batch: fs2.Stream[F, T]
+  )(implicit encoder: JsonRowEncoder[F, T]): F[Unit] =
+    for {
+      requestBuilder <- prepareInsertRequest(auth)
+      compressedStream = compress(insertBodyLines(statement, batch))
+      result <- fs2.Stream
+        .resource(bodyPublisher(compressedStream))
+        .evalMap { publisher =>
+          val request = requestBuilder.POST(publisher).build()
+          for {
+            response <- sendRequest(request)
+            status = response.statusCode()
+            bodyByteStream = fs2.io
+              .readInputStream[F](Async[F].delay(response.body()), chunkSize)
+            bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
+            _ <-
+              if (status != Http.Ok)
+                readErrorAndDrain(bodyLineStream).compile.drain
+              else
+                bodyLineStream.compile.drain
+          } yield ()
+        }
+        .compile
+        .lastOrError
+    } yield result
 
 }
 
