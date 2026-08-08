@@ -8,8 +8,8 @@ val supportedScalaVersions = Seq(scala3, scala213)
 
 ThisBuild / scalaVersion := scala3
 
-val fs2Version = "3.12.0"
-val catsEffectVersion = "3.6.3"
+val fs2Version = "3.13.0"
+val catsEffectVersion = "3.7.0"
 
 lazy val commonSettings = Seq(
   crossScalaVersions := supportedScalaVersions,
@@ -45,9 +45,9 @@ lazy val circe = (project in file("circe"))
   .settings(
     name := "fs2-clickhouse-circe",
     libraryDependencies ++= Seq(
-      "io.circe" %% "circe-core" % "0.14.14",
-      "io.circe" %% "circe-generic" % "0.14.14",
-      "io.circe" %% "circe-parser" % "0.14.14",
+      "io.circe" %% "circe-core" % "0.14.16",
+      "io.circe" %% "circe-generic" % "0.14.16",
+      "io.circe" %% "circe-parser" % "0.14.16",
     )
   ).dependsOn(core)
 
@@ -59,7 +59,7 @@ lazy val compression = (project in file("compression"))
       // supports lz4 frame format with dependent blocks
       "org.apache.commons" % "commons-compress" % "1.28.0",
       // TODO: Consider having zstd as separate module
-      "com.github.luben" % "zstd-jni" % "1.5.7-4" /*% Optional*/
+      "com.github.luben" % "zstd-jni" % "1.5.7-13" /*% Optional*/
     )
   ).dependsOn(core)
 
@@ -69,12 +69,12 @@ lazy val tests = (project in file("tests"))
     name := "fs2-clickhouse-tests",
     libraryDependencies ++= Seq(
       // TODO: update deps
-      "org.scalactic" %% "scalactic" % "3.2.19",
-      "org.scalatest" %% "scalatest" % "3.2.19" % "it, test",
+      "org.scalactic" %% "scalactic" % "3.2.20",
+      "org.scalatest" %% "scalatest" % "3.2.20" % "it, test",
       "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.44.1" % "it, test",
       "com.dimafeng" %% "testcontainers-scala-clickhouse" % "0.44.1" % "it, test",
-      "com.clickhouse" % "clickhouse-jdbc" % "0.9.1" % "it, test",
-      "org.typelevel" %% "cats-effect-testing-scalatest" % "1.6.0" % "it, test"
+      "com.clickhouse" % "clickhouse-jdbc" % "0.9.8" % "it, test",
+      "org.typelevel" %% "cats-effect-testing-scalatest" % "1.8.0" % "it, test"
     )
   ).dependsOn(core, circe, compression)
 
