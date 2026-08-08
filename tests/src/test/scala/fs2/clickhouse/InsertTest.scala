@@ -58,6 +58,51 @@ class InsertTest
       inserted.foreach(println)
       inserted should contain allElementsOf users
     }
+
+    "insert data via a statement containing reserved URI characters" in withContainers { implicit clickHouseContainer =>
+      withConnection { connection =>
+        val statement = connection.createStatement()
+        statement.execute("create database if not exists test")
+        statement.execute("create table test.reserved_chars_users (name text, age Int8) Engine = MergeTree() order by name")
+      }
+
+      val user = User("a&b=c d", 42)
+      // the `&`/`=` here (in a comment) exercise the same body-construction
+      // path as the query string itself, not just the row data. The comment
+      // has to come *before* `format JSONEachRow`: Clickhouse starts reading
+      // row data from the byte right after that clause, so anything
+      // trailing it (even just a comment) gets mistaken for a malformed row.
+      val insertStatement =
+        "insert into test.reserved_chars_users /* a&b=c */ format JSONEachRow"
+
+      fs2.Stream
+        .resource(
+          ClickhouseStream
+            .http[IO](
+              hostName,
+              httpApiPort,
+              Credentials(username, Some(password)),
+              compression = NoCompression
+            )
+        )
+        .flatMap(clickhouse =>
+          fs2.Stream
+            .emit(user)
+            .through(clickhouse.insert[User](insertStatement))
+        )
+        .compile.drain.unsafeRunSync()
+
+      val inserted = withConnection { connection =>
+        val statement = connection.createStatement()
+        val resultSet = statement.executeQuery("select name, age from test.reserved_chars_users")
+        val buffer = scala.collection.mutable.ArrayBuffer.empty[User]
+        while (resultSet.next())
+          buffer += User(resultSet.getString("name"), resultSet.getInt("age"))
+        buffer.toVector
+      }
+
+      inserted should contain(user)
+    }
   }
 
 }

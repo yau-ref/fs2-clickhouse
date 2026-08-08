@@ -55,6 +55,31 @@ class QueryTest
 
       result should contain allElementsOf users
     }
+
+    "read data selected via a query containing reserved URI characters" in withContainers { implicit clickHouseContainer =>
+      case class Row(value: String)
+      // `&` and `=` are legal-but-semantically-significant in a URI query
+      // component; if the query string isn't escaped before being spliced
+      // into the request URI, this splits into extra/misplaced params
+      // instead of reaching Clickhouse as one opaque value.
+      val reserved = "a&b=c d+e#f%g"
+
+      val result =
+        fs2.Stream
+          .resource(
+            ClickhouseStream
+              .http[IO](
+                hostName,
+                httpApiPort,
+                Credentials(username, Some(password)),
+                compression = NoCompression
+              )
+          ).flatMap(clickhouse =>
+            clickhouse.query[Row](s"select '$reserved' as value")
+          ).compile.toList.unsafeRunSync()
+
+      result shouldBe List(Row(reserved))
+    }
   }
 
 }
