@@ -78,11 +78,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       .through(fs2.text.lines)
 
   private def compress[T](
-    stream: fs2.Stream[F, T]
+    stream: fs2.Stream[F, Either[Throwable, String]]
   )(implicit encoder: JsonRowEncoder[F, T]): fs2.Stream[F, Byte] =
     stream
-      .map(encoder.encode)
-      .evalMap(_.value)
       .flatMap(encoded => fs2.Stream.fromEither(encoded))
       .intersperse("\n") // TODO: double check this
       .through(fs2.text.utf8.encode)
@@ -223,19 +221,20 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       )
   }
 
-  // TODO: this should be reimplmeneted for proper streaming
   override def insert[T](
     statement: String
   )(implicit encoder: JsonRowEncoder[F, T]): Pipe[F, T, Nothing] =
     stream =>
       for {
         requestBuilder <- fs2.Stream.eval(prepareInsertRequest(statement, auth))
-        publisher <- fs2.Stream.resource(bodyPublisher(compress(stream)))
+        encodedStream = stream.map(encoder.encode).evalMap(_.value)
+        compressedStream = compress(encodedStream)
+        publisher <- fs2.Stream.resource(bodyPublisher(compressedStream))
         request = requestBuilder.POST(publisher).build()
         response <- fs2.Stream.eval(sendRequest(request))
         status = response.statusCode()
-        bodyByteStream = fs2.io
-          .readInputStream[F](Async[F].delay(response.body()), chunkSize)
+        bodyByteStream =
+          fs2.io.readInputStream[F](Async[F].delay(response.body()), chunkSize)
         bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
         result <-
           if (status != Http.Ok)
