@@ -123,11 +123,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   ): fs2.Stream[F, Nothing] =
     for {
       errors: List[String] <- fs2.Stream.eval(bodyInputStream.compile.toList)
-      firstErr = errors.head
+      fullErr = errors.mkString("\n")
       // TODO: use error decoder
       //   errDec.decode(bodyLine)
       nope <- fs2.Stream.raiseError(
-        FS2CHQueryFailed(status, s"Booom! $firstErr")
+        FS2CHQueryFailed(status, s"Booom! $fullErr")
       )
     } yield nope
 
