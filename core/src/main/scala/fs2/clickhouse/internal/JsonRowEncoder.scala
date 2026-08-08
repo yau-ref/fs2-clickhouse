@@ -16,8 +16,8 @@ trait JsonRowEncoder[F[_], T] {
 
 object JsonRowEncoder {
 
-  /** Default encoder which just passes strings through as is in case you don't care
-    * about encoding them
+  /** Default encoder which just passes strings through as is in case you don't
+    * care about encoding them
     */
   implicit def stringEncoder[F[_]: Async]: JsonRowEncoder[F, String] =
     new JsonRowEncoder[F, String] {

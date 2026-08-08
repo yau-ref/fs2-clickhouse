@@ -10,7 +10,7 @@ import scala.language.implicitConversions
   "You should either implement row decoder or provide conversion from existing one"
 )
 trait JsonRowDecoder[F[_], T] {
-  type DecodedRow = EitherT[F, Throwable, T] 
+  type DecodedRow = EitherT[F, Throwable, T]
   def decode(json: String): DecodedRow
 }
 

@@ -7,7 +7,13 @@ import cats.syntax.all._
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
 import fs2.clickhouse.exceptions._
-import fs2.clickhouse.internal.ClickhouseHTTPClient.{ClickhousePasswordHeader, ClickhouseUserHeader, ErrorMessage, Http, errorDecoder}
+import fs2.clickhouse.internal.ClickhouseHTTPClient.{
+  errorDecoder,
+  ClickhousePasswordHeader,
+  ClickhouseUserHeader,
+  ErrorMessage,
+  Http
+}
 
 import java.io.InputStream
 import java.net.{ConnectException, URI}
@@ -24,7 +30,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   auth: Auth,
   compression: Compression
 ) extends ClickhouseClient[F] {
-  
+
   private val requestReadChunkSize = 1
   private val chunkSize = 100
 
@@ -33,9 +39,12 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   ): fs2.Stream[F, T] =
     for {
       request: HttpRequest <- fs2.Stream.eval(prepareRequest(q, auth, timeout))
-      response: HttpResponse[InputStream] <- fs2.Stream.eval(sendRequest(request))
+      response: HttpResponse[InputStream] <- fs2.Stream.eval(
+        sendRequest(request)
+      )
       status = response.statusCode()
-      bodyByteStream = fs2.io.readInputStream[F](Async[F].delay(response.body()), chunkSize)
+      bodyByteStream = fs2.io
+        .readInputStream[F](Async[F].delay(response.body()), chunkSize)
       bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
       // TODO: if status != 200 then set decoder to be just err else set a combination
       decodedElement <-
@@ -68,9 +77,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       .through(fs2.text.utf8.decode)
       .through(fs2.text.lines)
 
-  private def compress[T](stream: fs2.Stream[F, T])(
-    implicit encoder: JsonRowEncoder[F, T]
-  ): fs2.Stream[F, Byte] =
+  private def compress[T](
+    stream: fs2.Stream[F, T]
+  )(implicit encoder: JsonRowEncoder[F, T]): fs2.Stream[F, Byte] =
     stream
       .map(encoder.encode)
       .evalMap(_.value)
@@ -87,7 +96,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       .compile
       .resource
       .lastOrError
-      .map(inputStream => HttpRequest.BodyPublishers.ofInputStream(() => inputStream))
+      .map(inputStream =>
+        HttpRequest.BodyPublishers.ofInputStream(() => inputStream)
+      )
 
   private def sendRequest(request: HttpRequest): F[HttpResponse[InputStream]] =
     Async[F]
@@ -105,10 +116,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           ).raiseError
       }
 
-  /**
-   *  If it's not 200 let's read the rest of body and try to decode it
-   */
-  private def readErrorAndDrain(bodyInputStream: fs2.Stream[F, String]): fs2.Stream[F, Nothing] =
+  /** If it's not 200 let's read the rest of body and try to decode it
+    */
+  private def readErrorAndDrain(
+    bodyInputStream: fs2.Stream[F, String]
+  ): fs2.Stream[F, Nothing] =
     for {
       errors: List[String] <- fs2.Stream.eval(bodyInputStream.compile.toList)
       firstErr = errors.head
@@ -211,9 +223,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       )
   }
 
-  override def insert[T](statement: String)(implicit
-    encoder: JsonRowEncoder[F, T]
-  ): Pipe[F, T, Nothing] =
+  override def insert[T](
+    statement: String
+  )(implicit encoder: JsonRowEncoder[F, T]): Pipe[F, T, Nothing] =
     stream =>
       for {
         requestBuilder <- fs2.Stream.eval(prepareInsertRequest(statement, auth))
@@ -221,7 +233,8 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         request = requestBuilder.POST(publisher).build()
         response <- fs2.Stream.eval(sendRequest(request))
         status = response.statusCode()
-        bodyByteStream = fs2.io.readInputStream[F](Async[F].delay(response.body()), chunkSize)
+        bodyByteStream = fs2.io
+          .readInputStream[F](Async[F].delay(response.body()), chunkSize)
         bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
         result <-
           if (status != Http.Ok)
@@ -245,9 +258,7 @@ object ClickhouseHTTPClient {
   def errorDecoder[F[_]: Async]: JsonRowDecoder[F, ErrorMessage] =
     new JsonRowDecoder[F, ErrorMessage] {
       override def decode(json: String): DecodedRow =
-        EitherT.right(
-          ErrorMessage(json).pure[F]
-        )
+        EitherT.right(ErrorMessage(json).pure[F])
     }
 
   case class ErrorMessage(error: String)
