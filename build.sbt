@@ -68,10 +68,11 @@ lazy val tests = (project in file("tests"))
   .settings(
     name := "fs2-clickhouse-tests",
     libraryDependencies ++= Seq(
+      // TODO: update deps
       "org.scalactic" %% "scalactic" % "3.2.19",
       "org.scalatest" %% "scalatest" % "3.2.19" % "it, test",
-      "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.43.0" % "it, test",
-      "com.dimafeng" %% "testcontainers-scala-clickhouse" % "0.43.0" % "it, test",
+      "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.44.1" % "it, test",
+      "com.dimafeng" %% "testcontainers-scala-clickhouse" % "0.44.1" % "it, test",
       "com.clickhouse" % "clickhouse-jdbc" % "0.9.1" % "it, test",
       "org.typelevel" %% "cats-effect-testing-scalatest" % "1.6.0" % "it, test"
     )
