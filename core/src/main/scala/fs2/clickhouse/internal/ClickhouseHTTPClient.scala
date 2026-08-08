@@ -16,7 +16,7 @@ import fs2.clickhouse.internal.ClickhouseHTTPClient.{
 }
 
 import java.io.InputStream
-import java.net.{ConnectException, URI, URLEncoder}
+import java.net.{ConnectException, URI}
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
 import scala.concurrent.duration.FiniteDuration
@@ -78,7 +78,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       .through(fs2.text.utf8.decode)
       .through(fs2.text.lines)
 
-  private def compress[T](
+  private[internal] def compress[T](
     stream: fs2.Stream[F, Either[Throwable, String]]
   )(implicit encoder: JsonRowEncoder[F, T]): fs2.Stream[F, Byte] =
     stream
@@ -162,11 +162,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           .flatMap(withAuthHeaders(requestBuilder, _))
     }
 
-  private[internal] def encodeQueryParam(value: String): String =
-    URLEncoder.encode(value, StandardCharsets.UTF_8)
-
   private[internal] def clickhouseUri(
-    query: String,
     enableHttpCompression: Boolean = true
   ): URI =
     new URI(
@@ -175,7 +171,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       host,
       port,
       "/",
-      s"enable_http_compression=${if (enableHttpCompression) 1 else 0}&query=${encodeQueryParam(query)}",
+      s"enable_http_compression=${if (enableHttpCompression) 1 else 0}",
       ""
     )
 
@@ -184,13 +180,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     auth: Auth,
     timeout: Option[FiniteDuration]
   ): F[HttpRequest] = {
-    // TODO: there's non-documented way to pass params via POST
-    // https://github.com/ClickHouse/ClickHouse/issues/8842
-    val uri = clickhouseUri(q)
+    val uri = clickhouseUri()
     val builder =
       HttpRequest
         .newBuilder()
-        .GET()
+        .POST(HttpRequest.BodyPublishers.ofString(q, StandardCharsets.UTF_8))
         .uri(uri)
         .expectContinue(true)
     val builderWithTimeout = withTimeout(builder, timeout)
@@ -207,10 +201,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   }
 
   private[internal] def prepareInsertRequest(
-    statement: String,
     auth: Auth
   ): F[HttpRequest.Builder] = {
-    val uri = clickhouseUri(statement)
+    val uri = clickhouseUri()
     val builder =
       HttpRequest
         .newBuilder()
@@ -223,14 +216,21 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       )
   }
 
+  // compose the body stream from the statement and the values
+  private[internal] def insertBodyLines[T](
+    statement: String,
+    stream: fs2.Stream[F, T]
+  )(implicit encoder: JsonRowEncoder[F, T]) =
+    fs2.Stream.emit(Right(statement)) ++
+      stream.map(encoder.encode).evalMap(_.value)
+
   override def insert[T](
     statement: String
   )(implicit encoder: JsonRowEncoder[F, T]): Pipe[F, T, Nothing] =
     stream =>
       for {
-        requestBuilder <- fs2.Stream.eval(prepareInsertRequest(statement, auth))
-        encodedStream = stream.map(encoder.encode).evalMap(_.value)
-        compressedStream = compress(encodedStream)
+        requestBuilder <- fs2.Stream.eval(prepareInsertRequest(auth))
+        compressedStream = compress(insertBodyLines(statement, stream))
         publisher <- fs2.Stream.resource(bodyPublisher(compressedStream))
         request = requestBuilder.POST(publisher).build()
         response <- fs2.Stream.eval(sendRequest(request))
