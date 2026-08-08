@@ -2,6 +2,7 @@ package fs2.clickhouse.internal
 
 import cats.data.EitherT
 import cats.effect.Async
+import cats.effect.Resource
 import cats.syntax.all._
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
@@ -66,6 +67,27 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       // fs2.text.lines does it well
       .through(fs2.text.utf8.decode)
       .through(fs2.text.lines)
+
+  private def compress[T](stream: fs2.Stream[F, T])(
+    implicit encoder: JsonRowEncoder[F, T]
+  ): fs2.Stream[F, Byte] =
+    stream
+      .map(encoder.encode)
+      .evalMap(_.value)
+      .flatMap(encoded => fs2.Stream.fromEither(encoded))
+      .intersperse("\n") // TODO: double check this
+      .through(fs2.text.utf8.encode)
+      .through(compression.compress)
+
+  private def bodyPublisher(
+    stream: fs2.Stream[F, Byte]
+  ): Resource[F, HttpRequest.BodyPublisher] =
+    stream
+      .through(fs2.io.toInputStream[F])
+      .compile
+      .resource
+      .lastOrError
+      .map(inputStream => HttpRequest.BodyPublishers.ofInputStream(() => inputStream))
 
   private def sendRequest(request: HttpRequest): F[HttpResponse[InputStream]] =
     Async[F]
@@ -164,7 +186,49 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     builderWithHeaders.map(_.build())
   }
 
-  override def insert[T](statement: String): Pipe[F, T, Nothing] = ???
+  private def prepareInsertRequest(
+    statement: String,
+    auth: Auth
+  ): F[HttpRequest.Builder] = {
+    val uri = new URI(
+      "http",
+      "",
+      host,
+      port,
+      "/",
+      s"enable_http_compression=1&query=$statement",
+      ""
+    )
+    val builder =
+      HttpRequest
+        .newBuilder()
+        .uri(uri)
+        .expectContinue(true)
+    withAuthHeaders(builder, auth)
+      .map(builder =>
+        compression.acceptEncoding
+          .fold(builder)(builder.header("Content-Encoding", _))
+      )
+  }
+
+  override def insert[T](statement: String)(implicit
+    encoder: JsonRowEncoder[F, T]
+  ): Pipe[F, T, Nothing] =
+    stream =>
+      for {
+        requestBuilder <- fs2.Stream.eval(prepareInsertRequest(statement, auth))
+        publisher <- fs2.Stream.resource(bodyPublisher(compress(stream)))
+        request = requestBuilder.POST(publisher).build()
+        response <- fs2.Stream.eval(sendRequest(request))
+        status = response.statusCode()
+        bodyByteStream = fs2.io.readInputStream[F](Async[F].delay(response.body()), chunkSize)
+        bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
+        result <-
+          if (status != Http.Ok)
+            readErrorAndDrain(bodyLineStream)
+          else
+            bodyLineStream.drain
+      } yield result
 
 }
 
