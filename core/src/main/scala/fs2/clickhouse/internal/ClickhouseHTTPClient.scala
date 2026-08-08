@@ -16,8 +16,9 @@ import fs2.clickhouse.internal.ClickhouseHTTPClient.{
 }
 
 import java.io.InputStream
-import java.net.{ConnectException, URI}
+import java.net.{ConnectException, URI, URLEncoder}
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
+import java.nio.charset.StandardCharsets
 import scala.concurrent.duration.FiniteDuration
 
 /** Implements Clickhouse HTTP API
@@ -161,22 +162,31 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           .flatMap(withAuthHeaders(requestBuilder, _))
     }
 
-  private def prepareRequest(
+  private[internal] def encodeQueryParam(value: String): String =
+    URLEncoder.encode(value, StandardCharsets.UTF_8)
+
+  private[internal] def clickhouseUri(
+    query: String,
+    enableHttpCompression: Boolean = true
+  ): URI =
+    new URI(
+      "http",
+      "",
+      host,
+      port,
+      "/",
+      s"enable_http_compression=${if (enableHttpCompression) 1 else 0}&query=${encodeQueryParam(query)}",
+      ""
+    )
+
+  private[internal] def prepareRequest(
     q: String,
     auth: Auth,
     timeout: Option[FiniteDuration]
   ): F[HttpRequest] = {
     // TODO: there's non-documented way to pass params via POST
     // https://github.com/ClickHouse/ClickHouse/issues/8842
-    val uri = new URI(
-      "http",
-      "",
-      host,
-      port,
-      "/",
-      s"enable_http_compression=1&query=$q",
-      ""
-    )
+    val uri = clickhouseUri(q)
     val builder =
       HttpRequest
         .newBuilder()
@@ -196,19 +206,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     builderWithHeaders.map(_.build())
   }
 
-  private def prepareInsertRequest(
+  private[internal] def prepareInsertRequest(
     statement: String,
     auth: Auth
   ): F[HttpRequest.Builder] = {
-    val uri = new URI(
-      "http",
-      "",
-      host,
-      port,
-      "/",
-      s"enable_http_compression=1&query=$statement",
-      ""
-    )
+    val uri = clickhouseUri(statement)
     val builder =
       HttpRequest
         .newBuilder()
