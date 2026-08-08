@@ -44,7 +44,7 @@ class BaseTest
               )
           ).flatMap(clickhouse =>
             clickhouse
-              .query[User]("select from test.users")
+              .query[User]("select * from test.users")
               .handleErrorWith(err => {
                 fs2.Stream.eval(IO.println(s"OW! ${err}"))
                   .flatMap(_ => fs2.Stream.empty)
