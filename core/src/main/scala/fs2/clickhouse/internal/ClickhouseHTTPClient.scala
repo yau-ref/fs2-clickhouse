@@ -223,6 +223,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       )
   }
 
+  // TODO: this should be reimplmeneted for proper streaming
   override def insert[T](
     statement: String
   )(implicit encoder: JsonRowEncoder[F, T]): Pipe[F, T, Nothing] =
