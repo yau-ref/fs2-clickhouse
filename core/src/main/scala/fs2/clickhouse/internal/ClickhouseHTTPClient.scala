@@ -50,7 +50,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       // TODO: if status != 200 then set decoder to be just err else set a combination
       decodedElement <-
         if (status != Http.Ok)
-          readErrorAndDrain(bodyLineStream)
+          readErrorAndDrain(status, bodyLineStream)
         else {
           // TODO: 200 != all good, need to handle errors here too
           bodyLineStream
@@ -118,6 +118,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   /** If it's not 200 let's read the rest of body and try to decode it
     */
   private def readErrorAndDrain(
+    status: Int,
     bodyInputStream: fs2.Stream[F, String]
   ): fs2.Stream[F, Nothing] =
     for {
@@ -125,7 +126,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       firstErr = errors.head
       // TODO: use error decoder
       //   errDec.decode(bodyLine)
-      nope <- fs2.Stream.raiseError(FS2CHQueryFailed(0, s"Booom! $firstErr"))
+      nope <- fs2.Stream.raiseError(
+        FS2CHQueryFailed(status, s"Booom! $firstErr")
+      )
     } yield nope
 
   // TODO: let's make a compositional decoder which first tries to decode product and if fails proceeds to
@@ -255,7 +258,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
             bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
             _ <-
               if (status != Http.Ok)
-                readErrorAndDrain(bodyLineStream).compile.drain
+                readErrorAndDrain(status, bodyLineStream).compile.drain
               else
                 bodyLineStream.compile.drain
           } yield ()
