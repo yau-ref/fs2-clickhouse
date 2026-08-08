@@ -19,7 +19,7 @@ import java.io.InputStream
 import java.net.{ConnectException, URI}
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
-import scala.concurrent.duration.{FiniteDuration, DurationInt}
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 /** Implements Clickhouse HTTP API
   * https://clickhouse.com/docs/en/interfaces/http
@@ -237,10 +237,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
 
   // sends a single batch as one HTTP request and drains/decodes its response;
   // used to send one request per batch produced by `groupWithin` in `insert`
-  private def insertBatch[T](
-    statement: String,
-    batch: fs2.Stream[F, T]
-  )(implicit encoder: JsonRowEncoder[F, T]): F[Unit] =
+  private def insertBatch[T](statement: String, batch: fs2.Stream[F, T])(
+    implicit encoder: JsonRowEncoder[F, T]
+  ): F[Unit] =
     for {
       requestBuilder <- prepareInsertRequest(auth)
       compressedStream = compress(insertBodyLines(statement, batch))
