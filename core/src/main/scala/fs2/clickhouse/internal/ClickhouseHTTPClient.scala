@@ -47,17 +47,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       bodyByteStream = fs2.io
         .readInputStream[F](Async[F].delay(response.body()), chunkSize)
       bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
-      // TODO: if status != 200 then set decoder to be just err else set a combination
       decodedElement <-
         if (status != Http.Ok)
           readErrorAndDrain(status, bodyLineStream)
-        else {
-          // TODO: 200 != all good, need to handle errors here too
-          bodyLineStream
-            .map(decoder.decode)
-            .evalMap(_.value)
-            .flatMap(decoded => fs2.Stream.fromEither(decoded))
-        }
+        else
+          decodeRows(status, bodyLineStream)
     } yield decodedElement
 
   private def decompress(stream: fs2.Stream[F, Byte]): fs2.Stream[F, String] =
@@ -115,21 +109,62 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           ).raiseError
       }
 
+  private[internal] def joinLines(lines: fs2.Stream[F, String]): F[String] =
+    lines.compile.toList.map(_.mkString("\n"))
+
   /** If it's not 200 let's read the rest of body and try to decode it
     */
   private def readErrorAndDrain(
     status: Int,
     bodyInputStream: fs2.Stream[F, String]
   ): fs2.Stream[F, Nothing] =
-    for {
-      errors: List[String] <- fs2.Stream.eval(bodyInputStream.compile.toList)
-      fullErr = errors.mkString("\n")
-      // TODO: use error decoder
-      //   errDec.decode(bodyLine)
-      nope <- fs2.Stream.raiseError(
-        FS2CHQueryFailed(status, s"Booom! $fullErr")
+    fs2.Stream
+      .eval(joinLines(bodyInputStream))
+      .flatMap(fullErr =>
+        fs2.Stream.raiseError(FS2CHQueryFailed(status, s"Booom! $fullErr"))
       )
-    } yield nope
+
+  private[internal] def isJsonObjectLine(line: String): Boolean =
+    line.trim.startsWith("{")
+
+  /** Decodes each line of a 200-status body as a row of `T`, but stops at
+    * the first line that doesn't look like a JSONEachRow object. Clickhouse
+    * can commit to a 200 status and then fail mid-query, appending its
+    * exception text as a plain line instead of a JSON row since it can no
+    * longer switch the response status. Rows decoded before that line have
+    * already been emitted; the offending line and everything after it are
+    * collected and raised as FS2CHQueryFailed, without being fed to the
+    * decoder.
+    *
+    * A `{`-prefixed line that fails to decode is left alone: that failure
+    * propagates as-is (not relabeled as a server-side error).
+    */
+  private[internal] def decodeRows[T](
+    status: Int,
+    lines: fs2.Stream[F, String]
+  )(implicit decoder: JsonRowDecoder[F, T]): fs2.Stream[F, T] = {
+
+    def go(remaining: fs2.Stream[F, String]): fs2.Pull[F, T, Unit] =
+      remaining.pull.uncons1.flatMap {
+        case None =>
+          fs2.Pull.done
+        case Some((line, tail)) if isJsonObjectLine(line) =>
+          fs2.Pull.eval(decoder.decode(line).value).flatMap {
+            case Right(value) => fs2.Pull.output1(value) >> go(tail)
+            case Left(err)    => fs2.Pull.raiseError[F](err)
+          }
+        case Some((line, tail)) =>
+          fs2.Pull
+            .eval(joinLines(fs2.Stream.emit(line) ++ tail))
+            .flatMap(fullErr =>
+              fs2.Pull.raiseError[F](
+                FS2CHQueryFailed(status, s"Booom! $fullErr")
+              )
+            )
+      }
+
+    go(lines).stream
+  }
 
   // TODO: let's make a compositional decoder which first tries to decode product and if fails proceeds to
   //  decoding error (or visa versa); Also it should not just decoder errors but meta info too (and for now ignore it)
@@ -260,12 +295,37 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
               if (status != Http.Ok)
                 readErrorAndDrain(status, bodyLineStream).compile.drain
               else
-                bodyLineStream.compile.drain
+                drainOrFail(status, bodyLineStream)
           } yield ()
         }
         .compile
         .lastOrError
     } yield result
+
+  /** Insert responses are expected to have an empty body on success. Same
+    * underlying failure mode as `decodeRows` (Clickhouse committing to 200
+    * and then failing mid-stream), but since a successful insert body never
+    * has any content, the mere presence of a line is the signal that
+    * something failed.
+    */
+  private[internal] def drainOrFail(
+    status: Int,
+    bodyLineStream: fs2.Stream[F, String]
+  ): F[Unit] =
+    bodyLineStream.pull.uncons1
+      .flatMap {
+        case None =>
+          fs2.Pull.done
+        case Some((line, rest)) =>
+          fs2.Pull.eval(
+            joinLines(fs2.Stream.emit(line) ++ rest).flatMap(fullErr =>
+              FS2CHQueryFailed(status, s"Booom! $fullErr").raiseError[F, Unit]
+            )
+          )
+      }
+      .stream
+      .compile
+      .drain
 
 }
 
