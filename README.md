@@ -21,4 +21,55 @@ An fs2 / cats-effect streaming client for ClickHouse, built on its HTTP interfac
 - [core](core/README.md) — the client itself: querying, inserting, JSON encoding, and gzip compression
 - [circe](circe/README.md) — JSON row encoders/decoders based on circe
 - [compression](compression/README.md) — additional compression codecs (LZ4, ZSTD)
-- [tests](tests/README.md) — unit and testcontainers-based integration tests
+- [tests](tests/README.md) — unit and testcontainers-based integration tests, including property-based tests
+
+## Usage
+
+```scala
+import cats.effect.IO
+import fs2.clickhouse.ClickhouseStream
+import fs2.clickhouse.circe._
+import io.circe.generic.auto._
+
+case class User(name: String, age: Int)
+```
+
+### Query
+
+```scala
+fs2.Stream
+  .resource(ClickhouseStream.http[IO]("localhost"))
+  .flatMap(_.query[User]("select * from users"))
+  .compile
+  .toList
+```
+
+### Insert
+
+```scala
+val users = List(User("Alice", 30), User("Bob", 25))
+
+fs2.Stream
+  .resource(ClickhouseStream.http[IO]("localhost"))
+  .flatMap(clickhouse =>
+    fs2.Stream
+      .emits(users)
+      .through(clickhouse.insert[User]("insert into users"))
+  )
+  .compile
+  .drain
+```
+
+### Compression
+
+By default requests/responses are gzip-compressed (`compression = GZIP`). Pass a different `Compression` to pick another codec, e.g. LZ4 or ZSTD from the [compression](compression/README.md) module, or `NoCompression` to disable it:
+
+```scala
+import fs2.clickhouse.compression.{LZ4, NoCompression}
+
+fs2.Stream
+  .resource(ClickhouseStream.http[IO]("localhost", compression = LZ4))
+  .flatMap(_.query[User]("select * from users"))
+  .compile
+  .toList
+```
