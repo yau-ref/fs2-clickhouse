@@ -123,7 +123,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     fs2.Stream
       .eval(joinLines(bodyInputStream))
       .flatMap(fullErr =>
-        fs2.Stream.raiseError(FS2CHQueryFailed(status, s"Booom! $fullErr"))
+        fs2.Stream.raiseError(FS2CHQueryFailed(status, fullErr))
       )
 
   /** When http_write_exception_in_output_format=0 (the default), Clickhouse
@@ -228,7 +228,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
                 .eval(joinLines(fs2.Stream.emit(line) ++ tail))
                 .flatMap(fullErr =>
                   fs2.Pull
-                    .raiseError[F](FS2CHQueryFailed(status, s"Booom! $fullErr"))
+                    .raiseError[F](FS2CHQueryFailed(status, fullErr))
                 )
           }
       }
@@ -238,6 +238,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
 
   // TODO: let's make a compositional decoder which first tries to decode product and if fails proceeds to
   //  decoding error (or visa versa); Also it should not just decoder errors but meta info too (and for now ignore it)
+  // TODO: actually reconsider if it's even needed
   private val errDec: JsonRowDecoder[F, ErrorMessage] = errorDecoder[F]
 
   private def timeoutToJavaTime(timeout: FiniteDuration) =
@@ -395,7 +396,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         case Some((line, tail)) =>
           fs2.Pull.eval(
             joinLines(fs2.Stream.emit(line) ++ tail).flatMap(fullErr =>
-              FS2CHQueryFailed(status, s"Booom! $fullErr").raiseError[F, Unit]
+              FS2CHQueryFailed(status, fullErr).raiseError[F, Unit]
             )
           )
       }
