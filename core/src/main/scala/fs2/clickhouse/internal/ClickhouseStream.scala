@@ -22,10 +22,10 @@ object ClickhouseStream {
     compression: Compression = GZIP
   ): Resource[F, ClickhouseClient[F]] =
     // not using fromAutoClosable because HttpClient has been updated to be
-    // AutoCloseable in Java 21 only and since people using JDK > 8 is a fable we have to
-    // use legacy approach here
+    // AutoCloseable in Java 21 only and since people using JDK > 17 is a fable we have to
+    // fall back to the legacy approach here (forget and let gc handle it)
     Resource
-      .fromAutoCloseable(Async[F].delay(HttpClient.newHttpClient()))
+      .eval(Async[F].delay(HttpClient.newHttpClient()))
       .map(javaHttpClient =>
         new ClickhouseHTTPClient[F](
           javaHttpClient,
@@ -36,5 +36,4 @@ object ClickhouseStream {
         )
       )
 
-  }
 }
