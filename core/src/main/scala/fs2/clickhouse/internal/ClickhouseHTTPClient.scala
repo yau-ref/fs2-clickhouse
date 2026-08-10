@@ -109,15 +109,15 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       }
 
   /** Collects a line stream into a list, tolerating the stream ending in a
-    * failure instead of a clean EOF. Used to drain error bodies: Clickhouse
-    * can commit to a 200 status, write a complete `__exception__` block (see
+    * failure instead of a clean EOF. Used to drain error bodies: Clickhouse can
+    * commit to a 200 status, write a complete `__exception__` block (see
     * `parseExceptionBlock`), and then close the connection without a proper
     * chunked-encoding terminator, since it has no way to signal completion
     * other than ending the response. That leaves the underlying transport
     * throwing once its last buffered bytes are consumed, even though the
     * application-level message was fully received - so once we're already
-    * draining a known error body, a trailing read failure is treated the
-    * same as EOF, keeping whatever lines were read before it struck.
+    * draining a known error body, a trailing read failure is treated the same
+    * as EOF, keeping whatever lines were read before it struck.
     */
   private[internal] def drainLines(
     lines: fs2.Stream[F, String]
@@ -139,9 +139,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         fs2.Stream.raiseError(FS2CHQueryFailed(status, fullErr))
       )
 
-  /** With http_write_exception_in_output_format=0 (forced by `clickhouseUri`
-    * on every request), Clickhouse wraps a mid-stream error in a
-    * self-delimiting block, regardless of output format:
+  /** With http_write_exception_in_output_format=0 (forced by `clickhouseUri` on
+    * every request), Clickhouse wraps a mid-stream error in a self-delimiting
+    * block, regardless of output format:
     * {{{
     * __exception__
     * <TAG>
@@ -167,11 +167,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       .toScala
       .filterNot(_.isBlank)
 
-  /** Never emits - every branch ends in failure - so it's just "drain the
-    * rest of the body, then fail", which reads more directly as a Stream
-    * than as a hand-rolled Pull recursion. If the tag line matches
-    * `expectedTag`, only the lines between it and the closing line
-    * (`<message_length> <TAG>`) become the error message:
+  /** Never emits - every branch ends in failure - so it's just "drain the rest
+    * of the body, then fail", which reads more directly as a Stream than as a
+    * hand-rolled Pull recursion. If the tag line matches `expectedTag`, only
+    * the lines between it and the closing line (`<message_length> <TAG>`)
+    * become the error message:
     * {{{
     * __exception__
     * <TAG>
