@@ -50,10 +50,11 @@ class QueryErrorHandlingTest
     // forces a response that commits to HTTP 200 and only fails partway through
     // the body - Clickhouse's documented "HTTP response codes caveats" scenario -
     // by making throwIf fire after a few rows have already been flushed
-    // (max_block_size = 1 forces row-by-row blocks; whether any of them are
-    // actually flushed to the client before the abort is down to Clickhouse's
-    // own output buffering (see output_format_parallel_formatting), which
-    // this test does not control - see "already streamed" assertion below.
+    // (max_block_size = 1 forces row-by-row blocks, and
+    // output_format_parallel_formatting = 0 forces each block to be formatted
+    // and flushed to the response as it's produced instead of being buffered
+    // for parallel formatting - otherwise the not-yet-flushed rows can be
+    // discarded when the query aborts, before the client ever sees them;
     // http_write_exception_in_output_format = 0, needed for the client to
     // recognize the mid-stream failure at all, is forced by the client
     // itself on every request - see clickhouseUri)
@@ -63,7 +64,7 @@ class QueryErrorHandlingTest
           """select number, throwIf(number = 5, 'boom') as guard
             |from system.numbers
             |limit 10
-            |settings max_block_size = 1""".stripMargin
+            |settings max_block_size = 1, output_format_parallel_formatting = 0""".stripMargin
 
         val emitted = scala.collection.mutable.ArrayBuffer.empty[String]
 

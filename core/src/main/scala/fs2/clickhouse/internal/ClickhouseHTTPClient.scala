@@ -240,7 +240,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   )(implicit decoder: JsonRowDecoder[F, T]): fs2.Stream[F, T] = {
 
     // Once a row has been emitted, a failed fetch is treated as Clickhouse's
-    // documented mid-stream abort instead of being relabeled by `decompress`.
+    // documented mid-stream abort. The underlying `err` could be anything -
+    // a genuine connection drop, or a FS2CHDecompressionException from
+    // `decompress`'s own error handling, since that already wraps whatever
+    // caused the byte stream to fail - so the message here doesn't guess at
+    // the specific cause; `err` is preserved as `cause` for that.
     def process(
       stream: fs2.Stream[F, Either[Throwable, String]],
       hasEmitted: Boolean
@@ -252,7 +256,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           fs2.Pull.raiseError[F](
             FS2CHQueryFailed(
               status,
-              "connection closed while streaming the response",
+              "response stream failed after some rows had already been decoded",
               Some(err)
             )
           )
@@ -426,23 +430,12 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     bodyLineStream: fs2.Stream[F, String],
     exceptionTag: Option[String] = None
   ): F[Unit] = {
-    // see decodeRows for why the fetch itself, not just the tail after a
-    // recognized marker, needs to tolerate a mid-stream connection failure
     def process(
-      stream: fs2.Stream[F, Either[Throwable, String]],
-      hasSeenLine: Boolean
+      stream: fs2.Stream[F, Either[Throwable, String]]
     ): fs2.Pull[F, Nothing, Unit] =
       stream.pull.uncons1.flatMap {
         case None =>
           fs2.Pull.done
-        case Some((Left(err), _)) if hasSeenLine =>
-          fs2.Pull.raiseError[F](
-            FS2CHQueryFailed(
-              status,
-              "connection closed while streaming the response",
-              Some(err)
-            )
-          )
         case Some((Left(err), _)) =>
           fs2.Pull.raiseError[F](err)
         case Some((Right(line), tail)) if line.trim == ExceptionMarker =>
@@ -456,7 +449,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           )
       }
 
-    process(bodyLineStream.attempt, hasSeenLine = false).stream.compile.drain
+    process(bodyLineStream.attempt).stream.compile.drain
   }
 
 }

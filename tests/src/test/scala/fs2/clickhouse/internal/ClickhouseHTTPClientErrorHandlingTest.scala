@@ -102,7 +102,7 @@ class ClickhouseHTTPClientErrorHandlingTest
       result match {
         case Left(e: FS2CHQueryFailed) =>
           e.statusCode shouldBe 200
-          e.getMessage should include("connection closed while streaming the response")
+          e.getMessage should include("response stream failed after some rows had already been decoded")
           e.cause shouldBe Some(boom)
         case other =>
           fail(s"expected Left(FS2CHQueryFailed), got $other")
