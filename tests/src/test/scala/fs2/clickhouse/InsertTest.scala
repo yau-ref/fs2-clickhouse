@@ -55,7 +55,6 @@ class InsertTest
           buffer += User(resultSet.getString("name"), resultSet.getInt("age"))
         buffer.toVector
       }
-      inserted.foreach(println)
       inserted should contain allElementsOf users
     }
 
