@@ -74,7 +74,8 @@ lazy val tests = (project in file("tests"))
       "com.dimafeng" %% "testcontainers-scala-scalatest" % "0.44.1" % "it, test",
       "com.dimafeng" %% "testcontainers-scala-clickhouse" % "0.44.1" % "it, test",
       "com.clickhouse" % "clickhouse-jdbc" % "0.9.8" % "it, test",
-      "org.typelevel" %% "cats-effect-testing-scalatest" % "1.8.0" % "it, test"
+      "org.typelevel" %% "cats-effect-testing-scalatest" % "1.8.0" % "it, test",
+      "org.scalacheck" %% "scalacheck" % "1.18.1" % "it, test"
     )
   ).dependsOn(core, circe, compression)
 

@@ -100,16 +100,20 @@ class ClickhouseHTTPClientUriTest
     "put the statement first, ahead of the encoded rows" in {
       val lines =
         client
-          .insertBodyLines("insert into t format JSONEachRow", fs2.Stream("row1", "row2"))
+          .insertBodyLines("insert into t", fs2.Stream("row1", "row2"))
           .compile
           .toList
           .unsafeRunSync()
 
       lines shouldBe List(
-        Right("insert into t format JSONEachRow"),
+        Right("insert into t FORMAT JSONEachRow"),
         Right("row1"),
         Right("row2")
       )
+    }
+
+    "always append a FORMAT JSONEachRow clause" in {
+      client.withFormatClause("insert into t") shouldBe "insert into t FORMAT JSONEachRow"
     }
   }
 
@@ -119,7 +123,7 @@ class ClickhouseHTTPClientUriTest
         client
           .compress[String](
             client.insertBodyLines(
-              "insert into t format JSONEachRow -- a&b=c",
+              "insert into t -- a&b=c",
               fs2.Stream("row1", "row2")
             )
           )
@@ -128,7 +132,7 @@ class ClickhouseHTTPClientUriTest
           .string
           .unsafeRunSync()
 
-      body shouldBe "insert into t format JSONEachRow -- a&b=c\nrow1\nrow2"
+      body shouldBe "insert into t -- a&b=c FORMAT JSONEachRow\nrow1\nrow2"
     }
   }
 
