@@ -55,12 +55,18 @@ class ClickhouseHTTPClientUriTest
   "clickhouseUri" should {
     "default `enable_http_compression` to enabled" in {
       val uri = client.clickhouseUri()
-      paramsOf(uri.getRawQuery) shouldBe List("enable_http_compression=1")
+      paramsOf(uri.getRawQuery) shouldBe List(
+        "enable_http_compression=1",
+        "http_write_exception_in_output_format=0"
+      )
     }
 
     "honor an explicit `enableHttpCompression = false`" in {
       val uri = client.clickhouseUri(enableHttpCompression = false)
-      paramsOf(uri.getRawQuery) shouldBe List("enable_http_compression=0")
+      paramsOf(uri.getRawQuery) shouldBe List(
+        "enable_http_compression=0",
+        "http_write_exception_in_output_format=0"
+      )
     }
   }
 
@@ -70,7 +76,10 @@ class ClickhouseHTTPClientUriTest
       val request = client.prepareRequest(reserved, NoAuth, None).unsafeRunSync()
 
       request.method() shouldBe "POST"
-      paramsOf(request.uri().getRawQuery) shouldBe List("enable_http_compression=1")
+      paramsOf(request.uri().getRawQuery) shouldBe List(
+        "enable_http_compression=1",
+        "http_write_exception_in_output_format=0"
+      )
       bodyText(request) shouldBe reserved
     }
   }
@@ -80,7 +89,10 @@ class ClickhouseHTTPClientUriTest
       val builder = client.prepareInsertRequest(NoAuth).unsafeRunSync()
       val uri = builder.build().uri()
 
-      paramsOf(uri.getRawQuery) shouldBe List("enable_http_compression=1")
+      paramsOf(uri.getRawQuery) shouldBe List(
+        "enable_http_compression=1",
+        "http_write_exception_in_output_format=0"
+      )
     }
   }
 
