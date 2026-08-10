@@ -221,24 +221,39 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     exceptionTag: Option[String] = None
   )(implicit decoder: JsonRowDecoder[F, T]): fs2.Stream[F, T] = {
 
-    def process(stream: fs2.Stream[F, String]): fs2.Pull[F, T, Unit] =
+    // Once a row has been emitted, a failed fetch is treated as Clickhouse's
+    // documented mid-stream abort instead of being relabeled by `decompress`.
+    def process(
+      stream: fs2.Stream[F, Either[Throwable, String]],
+      hasEmitted: Boolean
+    ): fs2.Pull[F, T, Unit] =
       stream.pull.uncons1.flatMap {
         case None =>
           fs2.Pull.done
-        case Some((line, tail)) =>
+        case Some((Left(_), _)) if hasEmitted =>
+          fs2.Pull.raiseError[F](
+            FS2CHQueryFailed(
+              status,
+              "connection closed while streaming the response"
+            )
+          )
+        case Some((Left(err), _)) =>
+          fs2.Pull.raiseError[F](err)
+        case Some((Right(line), tail)) =>
           line.trim match {
             case trimmed if trimmed.startsWith("{") =>
               fs2.Pull.eval(decoder.decode(line).value).flatMap {
-                case Right(value) => fs2.Pull.output1(value) >> process(tail)
-                case Left(err)    => fs2.Pull.raiseError[F](err)
+                case Right(value) =>
+                  fs2.Pull.output1(value) >> process(tail, hasEmitted = true)
+                case Left(err) => fs2.Pull.raiseError[F](err)
               }
             case ExceptionMarker =>
-              parseExceptionBlock(status, exceptionTag, tail).pull.echo
+              parseExceptionBlock(status, exceptionTag, tail.rethrow).pull.echo
             case _ =>
               // it's not a valid data but also is not an exception marker,
               // so must be older exception format, going to drain it
               fs2.Pull
-                .eval(joinLines(fs2.Stream.emit(line) ++ tail))
+                .eval(joinLines(fs2.Stream.emit(line) ++ tail.rethrow))
                 .flatMap(fullErr =>
                   fs2.Pull
                     .raiseError[F](FS2CHQueryFailed(status, fullErr))
@@ -246,7 +261,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           }
       }
 
-    process(lines).stream
+    process(lines.attempt, hasEmitted = false).stream
   }
 
   private def timeoutToJavaTime(timeout: FiniteDuration) =
@@ -395,21 +410,35 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     bodyLineStream: fs2.Stream[F, String],
     exceptionTag: Option[String] = None
   ): F[Unit] = {
-    def process(stream: fs2.Stream[F, String]): fs2.Pull[F, Nothing, Unit] =
+    // see decodeRows for why the fetch itself, not just the tail after a
+    // recognized marker, needs to tolerate a mid-stream connection failure
+    def process(
+      stream: fs2.Stream[F, Either[Throwable, String]],
+      hasSeenLine: Boolean
+    ): fs2.Pull[F, Nothing, Unit] =
       stream.pull.uncons1.flatMap {
         case None =>
           fs2.Pull.done
-        case Some((line, tail)) if line.trim == ExceptionMarker =>
-          parseExceptionBlock(status, exceptionTag, tail).pull.echo
-        case Some((line, tail)) =>
+        case Some((Left(_), _)) if hasSeenLine =>
+          fs2.Pull.raiseError[F](
+            FS2CHQueryFailed(
+              status,
+              "connection closed while streaming the response"
+            )
+          )
+        case Some((Left(err), _)) =>
+          fs2.Pull.raiseError[F](err)
+        case Some((Right(line), tail)) if line.trim == ExceptionMarker =>
+          parseExceptionBlock(status, exceptionTag, tail.rethrow).pull.echo
+        case Some((Right(line), tail)) =>
           fs2.Pull.eval(
-            joinLines(fs2.Stream.emit(line) ++ tail).flatMap(fullErr =>
+            joinLines(fs2.Stream.emit(line) ++ tail.rethrow).flatMap(fullErr =>
               FS2CHQueryFailed(status, fullErr).raiseError[F, Unit]
             )
           )
       }
 
-    process(bodyLineStream).stream.compile.drain
+    process(bodyLineStream.attempt, hasSeenLine = false).stream.compile.drain
   }
 
 }
