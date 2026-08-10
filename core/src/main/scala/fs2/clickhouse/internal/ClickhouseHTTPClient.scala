@@ -154,62 +154,34 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       .toScala
       .filterNot(_.isBlank)
 
-  private def parseExceptionBlock[O](
-    status: Int,
-    expectedTag: Option[String],
-    afterMarker: fs2.Stream[F, String]
-  ): fs2.Pull[F, O, Unit] =
-    afterMarker.pull.uncons1.flatMap {
-      case None =>
-        fs2.Pull.raiseError[F](
-          FS2CHQueryFailed(status, s"Booom! $ExceptionMarker")
-        )
-      case Some((tagLine, tail)) =>
-        expectedTag match {
-          case Some(tag) if tagLine.trim == tag =>
-            collectExceptionMessage(status, tag, Vector.empty, tail)
-          case _ =>
-            fs2.Pull
-              .eval(joinLines(fs2.Stream(ExceptionMarker, tagLine) ++ tail))
-              .flatMap(fullErr =>
-                fs2.Pull
-                  .raiseError[F](FS2CHQueryFailed(status, s"Booom! $fullErr"))
-              )
-        }
-    }
-
-  /** Accumulates the lines between the tag line and the closing line:
-    *
+  /** Never emits - every branch ends in failure - so it's just "drain the
+    * rest of the body, then fail", which reads more directly as a Stream
+    * than as a hand-rolled Pull recursion. If the tag line matches
+    * `expectedTag`, only the lines between it and the closing line
+    * (`<message_length> <TAG>`) become the error message:
     * {{{
-    * <valid data>
-    *
     * __exception__
     * <TAG>
     * <error message>
     * <message_length> <TAG>
     * __exception__
     * }}}
-    * the tag line (`<TAG>`) and the closing line (`<message_length> <TAG>`) are
-    * delimiters and `<error message>` is an actual error
+    * Otherwise (mismatched or absent tag) the whole remainder, including the
+    * marker itself, is surfaced as-is.
     */
-  private def collectExceptionMessage[O](
+  private def parseExceptionBlock[O](
     status: Int,
-    tag: String,
-    messageLines: Vector[String],
-    remaining: fs2.Stream[F, String]
-  ): fs2.Pull[F, O, Unit] =
-    remaining.pull.uncons1.flatMap {
-      case Some((line, _)) if line.trim.endsWith(s" $tag") =>
-        // closing line
-        fs2.Pull.raiseError[F](
-          FS2CHQueryFailed(status, messageLines.mkString("\n"))
-        )
-      case Some((line, tail)) =>
-        collectExceptionMessage(status, tag, messageLines :+ line, tail)
-      case None =>
-        fs2.Pull.raiseError[F](
-          FS2CHQueryFailed(status, messageLines.mkString("\n"))
-        )
+    expectedTag: Option[String],
+    afterMarker: fs2.Stream[F, String]
+  ): fs2.Stream[F, O] =
+    fs2.Stream.eval(afterMarker.compile.toList).flatMap { lines =>
+      val message = (expectedTag, lines) match {
+        case (Some(tag), tagLine :: rest) if tagLine.trim == tag =>
+          rest.takeWhile(!_.trim.endsWith(s" $tag")).mkString("\n")
+        case _ =>
+          (ExceptionMarker :: lines).mkString("\n")
+      }
+      fs2.Stream.raiseError[F](FS2CHQueryFailed(status, message))
     }
 
   /** Decodes each line of a 200-status body as a row of `T`, but stops at the
@@ -248,7 +220,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
                 case Left(err)    => fs2.Pull.raiseError[F](err)
               }
             case ExceptionMarker =>
-              parseExceptionBlock(status, exceptionTag, tail)
+              parseExceptionBlock(status, exceptionTag, tail).pull.echo
             case _ =>
               // it's not a valid data but also is not an exception marker,
               // so must be older exception format, going to drain it
@@ -419,7 +391,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         case None =>
           fs2.Pull.done
         case Some((line, tail)) if line.trim == ExceptionMarker =>
-          parseExceptionBlock(status, exceptionTag, tail)
+          parseExceptionBlock(status, exceptionTag, tail).pull.echo
         case Some((line, tail)) =>
           fs2.Pull.eval(
             joinLines(fs2.Stream.emit(line) ++ tail).flatMap(fullErr =>
