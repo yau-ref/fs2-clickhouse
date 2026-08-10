@@ -40,7 +40,7 @@ package object circe {
     *   case class User(name: String, age: Int)
     *
     *   val stream: Pipe[F, User, Nothing] =
-    *     clickhouse.insert[User]("insert into test.users format JSONEachRow")
+    *     clickhouse.insert[User]("insert into test.users")
     * }}}
     */
   implicit def circeEncoderWrapper[F[_]: Sync, T: circe.Encoder]

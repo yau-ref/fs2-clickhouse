@@ -43,7 +43,7 @@ class InsertTest
         .flatMap(clickhouse =>
           fs2.Stream
             .emits(users)
-            .through(clickhouse.insert[User]("insert into test.users format JSONEachRow"))
+            .through(clickhouse.insert[User]("insert into test.users"))
         )
         .compile.drain.unsafeRunSync()
 
@@ -66,13 +66,13 @@ class InsertTest
       }
 
       val user = User("a&b=c d", 42)
-      // the `&`/`=` here (in a comment) exercise the same body-construction
       // path as the query string itself, not just the row data. The comment
-      // has to come *before* `format JSONEachRow`: Clickhouse starts reading
-      // row data from the byte right after that clause, so anything
-      // trailing it (even just a comment) gets mistaken for a malformed row.
+      // has to come *before* where the client appends `FORMAT JSONEachRow`:
+      // Clickhouse starts reading row data from the byte right after that
+      // clause, so anything trailing it (even just a comment) gets mistaken
+      // for a malformed row.
       val insertStatement =
-        "insert into test.reserved_chars_users /* a&b=c */ format JSONEachRow"
+        "insert into test.reserved_chars_users /* a&b=c */"
 
       fs2.Stream
         .resource(
@@ -127,7 +127,7 @@ class InsertTest
             .emits(users)
             // a batch size that doesn't evenly divide the number of rows,
             // so the last batch is partial and still has to be flushed
-            .through(clickhouse.insert[User]("insert into test.batched_users format JSONEachRow", maxBatchSize = 37))
+            .through(clickhouse.insert[User]("insert into test.batched_users", maxBatchSize = 37))
         )
         .compile.drain.unsafeRunSync()
 
