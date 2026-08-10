@@ -12,4 +12,16 @@ package object clickhouse {
 
   type ClickhouseSink[F[_], I] = Pipe[F, I, Nothing]
 
+  type Auth = internal.Auth
+  val Auth = internal.Auth
+
+  type NoAuth = internal.NoAuth.type
+  val NoAuth = internal.NoAuth
+
+  type FromEnv = internal.FromEnv.type
+  val FromEnv = internal.FromEnv
+
+  type Credentials = internal.Credentials
+  val Credentials = internal.Credentials
+
 }
