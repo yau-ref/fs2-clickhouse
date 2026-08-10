@@ -63,7 +63,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           // decompressors are expected to be polite
           // and wrap errors by FS2CHDecompressionException
           // but let's be realistic :)
-          fs2.Stream.raiseError(new FS2CHDecompressionException(e))
+          fs2.Stream.raiseError(FS2CHDecompressionException(e))
       }
       // decoded chunks could start and end in the middle of a line,
       // dividing row into parts which should be merged before they reach decoding;
