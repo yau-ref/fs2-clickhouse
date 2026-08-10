@@ -41,17 +41,25 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       response: HttpResponse[InputStream] <- fs2.Stream.eval(
         sendRequest(request)
       )
-      status = response.statusCode()
-      tag = exceptionTag(response)
-      bodyByteStream = fs2.io
-        .readInputStream[F](Async[F].delay(response.body()), chunkSize)
-      bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
+      (status, tag, bodyLineStream) = readBody(response)
       decodedElement <-
         if (status != Http.Ok)
           readErrorAndDrain(status, bodyLineStream)
         else
           decodeRows(status, bodyLineStream, tag)
     } yield decodedElement
+
+  
+  private def readBody(
+    response: HttpResponse[InputStream]
+  ): (Int, Option[String], fs2.Stream[F, String]) = {
+    val status = response.statusCode()
+    val tag = exceptionTag(response)
+    val bodyByteStream =
+      fs2.io.readInputStream[F](Async[F].delay(response.body()), chunkSize)
+    val bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
+    (status, tag, bodyLineStream)
+  }
 
   private def decompress(stream: fs2.Stream[F, Byte]): fs2.Stream[F, String] =
     stream
@@ -124,8 +132,19 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   ): F[List[String]] =
     lines.attempt.compile.toList.map(_.collect { case Right(line) => line })
 
-  private[internal] def joinLines(lines: fs2.Stream[F, String]): F[String] =
-    drainLines(lines).map(_.mkString("\n"))
+  /** Like `drainLines`, but - since this is used at the top level, where a
+    * drained-away failure would otherwise be indistinguishable from
+    * Clickhouse's own benign mid-stream termination (see `decodeRows`) -
+    * also surfaces the first failure encountered instead of discarding it.
+    */
+  private[internal] def joinLines(
+    lines: fs2.Stream[F, String]
+  ): F[(String, Option[Throwable])] =
+    lines.attempt.compile.toList.map { results =>
+      val joined = results.collect { case Right(line) => line }.mkString("\n")
+      val failure = results.collectFirst { case Left(err) => err }
+      (joined, failure)
+    }
 
   /** If it's not 200 let's read the rest of body and try to decode it
     */
@@ -135,9 +154,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   ): fs2.Stream[F, Nothing] =
     fs2.Stream
       .eval(joinLines(bodyInputStream))
-      .flatMap(fullErr =>
-        fs2.Stream.raiseError(FS2CHQueryFailed(status, fullErr))
-      )
+      .flatMap { case (fullErr, cause) =>
+        fs2.Stream.raiseError(FS2CHQueryFailed(status, fullErr, cause))
+      }
 
   /** With http_write_exception_in_output_format=0 (forced by `clickhouseUri` on
     * every request), Clickhouse wraps a mid-stream error in a self-delimiting
@@ -230,11 +249,12 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       stream.pull.uncons1.flatMap {
         case None =>
           fs2.Pull.done
-        case Some((Left(_), _)) if hasEmitted =>
+        case Some((Left(err), _)) if hasEmitted =>
           fs2.Pull.raiseError[F](
             FS2CHQueryFailed(
               status,
-              "connection closed while streaming the response"
+              "connection closed while streaming the response",
+              Some(err)
             )
           )
         case Some((Left(err), _)) =>
@@ -254,10 +274,10 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
               // so must be older exception format, going to drain it
               fs2.Pull
                 .eval(joinLines(fs2.Stream.emit(line) ++ tail.rethrow))
-                .flatMap(fullErr =>
+                .flatMap { case (fullErr, cause) =>
                   fs2.Pull
-                    .raiseError[F](FS2CHQueryFailed(status, fullErr))
-                )
+                    .raiseError[F](FS2CHQueryFailed(status, fullErr, cause))
+                }
           }
       }
 
@@ -385,14 +405,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           val request = requestBuilder.POST(publisher).build()
           for {
             response <- sendRequest(request)
-            status = response.statusCode()
-            tag = exceptionTag(response)
-            bodyByteStream =
-              fs2.io.readInputStream[F](
-                Async[F].delay(response.body()),
-                chunkSize
-              )
-            bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
+            (status, tag, bodyLineStream) = readBody(response)
             _ <-
               if (status != Http.Ok)
                 readErrorAndDrain(status, bodyLineStream).compile.drain
@@ -423,11 +436,12 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       stream.pull.uncons1.flatMap {
         case None =>
           fs2.Pull.done
-        case Some((Left(_), _)) if hasSeenLine =>
+        case Some((Left(err), _)) if hasSeenLine =>
           fs2.Pull.raiseError[F](
             FS2CHQueryFailed(
               status,
-              "connection closed while streaming the response"
+              "connection closed while streaming the response",
+              Some(err)
             )
           )
         case Some((Left(err), _)) =>
@@ -436,9 +450,10 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           parseExceptionBlock(status, exceptionTag, tail.rethrow).pull.echo
         case Some((Right(line), tail)) =>
           fs2.Pull.eval(
-            joinLines(fs2.Stream.emit(line) ++ tail.rethrow).flatMap(fullErr =>
-              FS2CHQueryFailed(status, fullErr).raiseError[F, Unit]
-            )
+            joinLines(fs2.Stream.emit(line) ++ tail.rethrow).flatMap {
+              case (fullErr, cause) =>
+                FS2CHQueryFailed(status, fullErr, cause).raiseError[F, Unit]
+            }
           )
       }
 
