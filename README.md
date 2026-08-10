@@ -60,7 +60,7 @@ By default connections are unauthenticated (`auth = NoAuth`). Pass
 `CLICKHOUSE_USER`/`CLICKHOUSE_PASSWORD` from the environment:
 
 ```scala
-import fs2.clickhouse.internal.{Credentials, FromEnv}
+import fs2.clickhouse.{Credentials, FromEnv}
 
 ClickhouseStream.http[IO]("localhost", auth = Credentials("default", Some("secret")))
 ClickhouseStream.http[IO]("localhost", auth = FromEnv)
