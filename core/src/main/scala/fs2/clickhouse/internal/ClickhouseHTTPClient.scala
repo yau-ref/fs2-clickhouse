@@ -108,8 +108,24 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           ).raiseError
       }
 
+  /** Collects a line stream into a list, tolerating the stream ending in a
+    * failure instead of a clean EOF. Used to drain error bodies: Clickhouse
+    * can commit to a 200 status, write a complete `__exception__` block (see
+    * `parseExceptionBlock`), and then close the connection without a proper
+    * chunked-encoding terminator, since it has no way to signal completion
+    * other than ending the response. That leaves the underlying transport
+    * throwing once its last buffered bytes are consumed, even though the
+    * application-level message was fully received - so once we're already
+    * draining a known error body, a trailing read failure is treated the
+    * same as EOF, keeping whatever lines were read before it struck.
+    */
+  private[internal] def drainLines(
+    lines: fs2.Stream[F, String]
+  ): F[List[String]] =
+    lines.attempt.compile.toList.map(_.collect { case Right(line) => line })
+
   private[internal] def joinLines(lines: fs2.Stream[F, String]): F[String] =
-    lines.compile.toList.map(_.mkString("\n"))
+    drainLines(lines).map(_.mkString("\n"))
 
   /** If it's not 200 let's read the rest of body and try to decode it
     */
@@ -171,7 +187,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     expectedTag: Option[String],
     afterMarker: fs2.Stream[F, String]
   ): fs2.Stream[F, O] =
-    fs2.Stream.eval(afterMarker.compile.toList).flatMap { lines =>
+    fs2.Stream.eval(drainLines(afterMarker)).flatMap { lines =>
       val message = (expectedTag, lines) match {
         case (Some(tag), tagLine :: rest) if tagLine.trim == tag =>
           rest.takeWhile(!_.trim.endsWith(s" $tag")).mkString("\n")
