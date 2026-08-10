@@ -21,7 +21,7 @@ An fs2 / cats-effect streaming client for ClickHouse, built on its HTTP interfac
 - [core](core/README.md) — the client itself: querying, inserting, JSON encoding, and gzip compression
 - [circe](circe/README.md) — JSON row encoders/decoders based on circe
 - [compression](compression/README.md) — additional compression codecs (LZ4, ZSTD)
-- [tests](tests/README.md) — unit and testcontainers-based integration tests
+- [tests](tests/README.md) — unit and testcontainers-based integration tests, including property-based tests
 
 ## Usage
 
