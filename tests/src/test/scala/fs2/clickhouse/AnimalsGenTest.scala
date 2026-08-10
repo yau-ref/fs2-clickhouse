@@ -73,6 +73,7 @@ class AnimalsGenTest
             clickhouse.query[Animal]("select * from test.animals")
           ).compile.toVector.unsafeRunSync()
 
+      result shouldNot have size 0  // to make sure there was any data
       result should have size animals.size.toLong
       result should contain allElementsOf animals
     }
