@@ -139,9 +139,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         fs2.Stream.raiseError(FS2CHQueryFailed(status, fullErr))
       )
 
-  /** When http_write_exception_in_output_format=0 (the default), Clickhouse
-    * wraps a mid-stream error in a self-delimiting block, regardless of output
-    * format:
+  /** With http_write_exception_in_output_format=0 (forced by `clickhouseUri`
+    * on every request), Clickhouse wraps a mid-stream error in a
+    * self-delimiting block, regardless of output format:
     * {{{
     * __exception__
     * <TAG>
@@ -303,7 +303,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       host,
       port,
       "/",
-      s"enable_http_compression=${if (enableHttpCompression) 1 else 0}",
+      s"enable_http_compression=${if (enableHttpCompression) 1 else 0}" +
+        // TODO: as of writing, Clickhouse has no X-ClickHouse-* header for
+        //   arbitrary settings (only User/Key/Database/Format) - if that
+        //   changes, revisit moving this off the query string
+        "&http_write_exception_in_output_format=0",
       ""
     )
 
