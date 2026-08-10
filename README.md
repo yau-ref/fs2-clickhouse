@@ -62,7 +62,7 @@ fs2.Stream
 
 ### Compression
 
-By default requests/responses are gzip-compressed. Pass a different `Compression` to pick another codec, e.g. LZ4 or ZSTD from the [compression](compression/README.md) module, or `NoCompression` to disable it:
+By default requests/responses are gzip-compressed (`compression = GZIP`). Pass a different `Compression` to pick another codec, e.g. LZ4 or ZSTD from the [compression](compression/README.md) module, or `NoCompression` to disable it:
 
 ```scala
 import fs2.clickhouse.compression.{LZ4, NoCompression}
