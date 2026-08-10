@@ -7,7 +7,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
 class CompressionTest
-  extends AnyWordSpec
+    extends AnyWordSpec
     with Matchers
     with Inspectors
     with TestContainerForAll

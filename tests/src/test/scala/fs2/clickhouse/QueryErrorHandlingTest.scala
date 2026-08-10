@@ -13,7 +13,7 @@ import org.scalatest.wordspec.AnyWordSpec
 // server, not hand-built string fixtures - complements the unit-level
 // internal.ClickhouseHTTPClientErrorHandlingTest
 class QueryErrorHandlingTest
-  extends AnyWordSpec
+    extends AnyWordSpec
     with Matchers
     with TestContainerForAll
     with TestContainerHelpers {
@@ -32,7 +32,11 @@ class QueryErrorHandlingTest
                   compression = NoCompression
                 )
             )
-            .flatMap(_.query[String]("select * from does_not_exist_QueryErrorHandlingTest"))
+            .flatMap(
+              _.query[String](
+                "select * from does_not_exist_QueryErrorHandlingTest"
+              )
+            )
             .compile
             .drain
             .attempt

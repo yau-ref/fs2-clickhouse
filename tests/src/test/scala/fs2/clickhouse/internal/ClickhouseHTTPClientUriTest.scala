@@ -12,9 +12,7 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.{CompletableFuture, Flow, TimeUnit}
 
-class ClickhouseHTTPClientUriTest
-  extends AnyWordSpec
-    with Matchers {
+class ClickhouseHTTPClientUriTest extends AnyWordSpec with Matchers {
 
   // never actually sends a request in this suite - prepareRequest/
   // prepareInsertRequest only build the HttpRequest, they don't call send
@@ -73,7 +71,8 @@ class ClickhouseHTTPClientUriTest
   "prepareRequest" should {
     "send the query as the POST body, untouched, instead of a URL param" in {
       val reserved = "select 1&2 as x -- 100% not a=param"
-      val request = client.prepareRequest(reserved, NoAuth, None).unsafeRunSync()
+      val request =
+        client.prepareRequest(reserved, NoAuth, None).unsafeRunSync()
 
       request.method() shouldBe "POST"
       paramsOf(request.uri().getRawQuery) shouldBe List(
@@ -113,7 +112,9 @@ class ClickhouseHTTPClientUriTest
     }
 
     "always append a FORMAT JSONEachRow clause" in {
-      client.withFormatClause("insert into t") shouldBe "insert into t FORMAT JSONEachRow"
+      client.withFormatClause(
+        "insert into t"
+      ) shouldBe "insert into t FORMAT JSONEachRow"
     }
   }
 

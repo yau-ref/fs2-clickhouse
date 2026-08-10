@@ -13,22 +13,26 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
 class QueryTest
-  extends AnyWordSpec
+    extends AnyWordSpec
     with Matchers
     with Inspectors
-    with TestContainerForAll 
-    with TestContainerHelpers 
+    with TestContainerForAll
+    with TestContainerHelpers
     with WithConnection {
-  
+
   "client" should {
     "read data" in withContainers { implicit clickHouseContainer =>
       val users = TestData.users()
 
       withConnection { connection =>
         val statement = connection.createStatement()
-        statement.execute("create table users ( name text, age Int8) Engine = MergeTree() order by name")
-        users.foreach( user =>
-          statement.execute(s"insert into users values ('${user.name}', ${user.age})")
+        statement.execute(
+          "create table users ( name text, age Int8) Engine = MergeTree() order by name"
+        )
+        users.foreach(user =>
+          statement.execute(
+            s"insert into users values ('${user.name}', ${user.age})"
+          )
         )
       }
 
@@ -42,43 +46,51 @@ class QueryTest
                 Credentials(username, Some(password)),
                 compression = NoCompression
               )
-          ).flatMap(clickhouse =>
+          )
+          .flatMap(clickhouse =>
             clickhouse
               .query[User]("select * from test.users")
-              .handleErrorWith(err => {
-                fs2.Stream.eval(IO.println(s"OW! ${err}"))
+              .handleErrorWith(err =>
+                fs2.Stream
+                  .eval(IO.println(s"OW! ${err}"))
                   .flatMap(_ => fs2.Stream.empty)
-
-              })
-
-          ).compile.toList.unsafeRunSync()
+              )
+          )
+          .compile
+          .toList
+          .unsafeRunSync()
 
       result should contain allElementsOf users
     }
 
-    "read data selected via a query containing reserved URI characters" in withContainers { implicit clickHouseContainer =>
-      case class Row(value: String)
-      // `&` and `=` are legal-but-semantically-significant in a URI query
-      // component; if the query string isn't escaped before being spliced
-      // into the request URI, this splits into extra/misplaced params
-      // instead of reaching Clickhouse as one opaque value.
-      val reserved = "a&b=c d+e#f%g"
+    "read data selected via a query containing reserved URI characters" in withContainers {
+      implicit clickHouseContainer =>
+        case class Row(value: String)
+        // `&` and `=` are legal-but-semantically-significant in a URI query
+        // component; if the query string isn't escaped before being spliced
+        // into the request URI, this splits into extra/misplaced params
+        // instead of reaching Clickhouse as one opaque value.
+        val reserved = "a&b=c d+e#f%g"
 
-      val result =
-        fs2.Stream
-          .resource(
-            ClickhouseStream
-              .http[IO](
-                hostName,
-                httpApiPort,
-                Credentials(username, Some(password)),
-                compression = NoCompression
-              )
-          ).flatMap(clickhouse =>
-            clickhouse.query[Row](s"select '$reserved' as value")
-          ).compile.toList.unsafeRunSync()
+        val result =
+          fs2.Stream
+            .resource(
+              ClickhouseStream
+                .http[IO](
+                  hostName,
+                  httpApiPort,
+                  Credentials(username, Some(password)),
+                  compression = NoCompression
+                )
+            )
+            .flatMap(clickhouse =>
+              clickhouse.query[Row](s"select '$reserved' as value")
+            )
+            .compile
+            .toList
+            .unsafeRunSync()
 
-      result shouldBe List(Row(reserved))
+        result shouldBe List(Row(reserved))
     }
   }
 

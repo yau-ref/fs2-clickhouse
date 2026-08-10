@@ -8,7 +8,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
 class LZ4CompressionTest
-  extends AsyncWordSpec
+    extends AsyncWordSpec
     with AsyncIOSpec
     with Matchers
     with Inspectors
@@ -18,7 +18,11 @@ class LZ4CompressionTest
     with CompressionBehaviors {
 
   "LZ4Compression" should {
-    behave like decompressionBehavior(LZ4, "helloworld\n", "BCJNGGRApwsAAIBoZWxsb3dvcmxkCgAAAADxpNsz")
+    behave like decompressionBehavior(
+      LZ4,
+      "helloworld\n",
+      "BCJNGGRApwsAAIBoZWxsb3dvcmxkCgAAAADxpNsz"
+    )
     behave like integratedDecompressionBehavior(LZ4)
   }
 

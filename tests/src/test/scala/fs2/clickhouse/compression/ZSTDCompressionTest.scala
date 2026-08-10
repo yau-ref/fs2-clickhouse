@@ -8,7 +8,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
 class ZSTDCompressionTest
-  extends AsyncWordSpec
+    extends AsyncWordSpec
     with AsyncIOSpec
     with Matchers
     with Inspectors
@@ -16,10 +16,14 @@ class ZSTDCompressionTest
     with TestContainerHelpers
     with WithConnection
     with CompressionBehaviors {
-  
+
   "ZSTDCompression" should {
-    behave like decompressionBehavior(ZSTD, "helloworld\n", "KLUv/QRYWQAAaGVsbG93b3JsZAp/WzH0")
+    behave like decompressionBehavior(
+      ZSTD,
+      "helloworld\n",
+      "KLUv/QRYWQAAaGVsbG93b3JsZAp/WzH0"
+    )
     behave like integratedDecompressionBehavior(ZSTD)
   }
-  
+
 }

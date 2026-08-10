@@ -6,7 +6,7 @@ trait TestContainerHelpers {
 
   val containerDef: ClickHouseContainer.Def =
     ClickHouseContainer.Def()
-  
+
   def httpApiPort(implicit clickHouseContainer: ClickHouseContainer): Int =
     clickHouseContainer.mappedPort(8123)
 
