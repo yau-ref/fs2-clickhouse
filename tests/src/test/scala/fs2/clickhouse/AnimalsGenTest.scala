@@ -55,7 +55,7 @@ class AnimalsGenTest
         .flatMap(clickhouse =>
           fs2.Stream
             .emits(animals)
-            .through(clickhouse.insert[Animal]("insert into test.animals format JSONEachRow"))
+            .through(clickhouse.insert[Animal]("insert into test.animals"))
         )
         .compile.drain.unsafeRunSync()
 
