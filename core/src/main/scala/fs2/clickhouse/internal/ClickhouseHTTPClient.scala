@@ -20,6 +20,7 @@ import java.net.{ConnectException, URI}
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.jdk.OptionConverters._
 
 /** Implements Clickhouse HTTP API
   * https://clickhouse.com/docs/en/interfaces/http
@@ -44,6 +45,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         sendRequest(request)
       )
       status = response.statusCode()
+      tag = exceptionTag(response)
       bodyByteStream = fs2.io
         .readInputStream[F](Async[F].delay(response.body()), chunkSize)
       bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
@@ -51,7 +53,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         if (status != Http.Ok)
           readErrorAndDrain(status, bodyLineStream)
         else
-          decodeRows(status, bodyLineStream)
+          decodeRows(status, bodyLineStream, tag)
     } yield decodedElement
 
   private def decompress(stream: fs2.Stream[F, Byte]): fs2.Stream[F, String] =
@@ -124,46 +126,143 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         fs2.Stream.raiseError(FS2CHQueryFailed(status, s"Booom! $fullErr"))
       )
 
-  private[internal] def isJsonObjectLine(line: String): Boolean =
-    line.trim.startsWith("{")
+  /** When http_write_exception_in_output_format=0 (the default), Clickhouse
+    * wraps a mid-stream error in a self-delimiting block, regardless of
+    * output format:
+    * {{{
+    * __exception__
+    * <TAG>
+    * <error message>
+    * <message_length> <TAG>
+    * __exception__
+    * }}}
+    * `<TAG>` is a random token, echoed up front in the
+    * `X-ClickHouse-Exception-Tag` response header - so it's known before the
+    * body is read, and can be used to confirm a `__exception__` line is
+    * really the protocol marker rather than coincidental row content.
+    * See "HTTP response codes caveats" at https://clickhouse.com/docs/interfaces/http
+    */
+  private[internal] val ExceptionMarker = "__exception__"
+  private val ExceptionTagHeader = "X-ClickHouse-Exception-Tag"
+
+  private[internal] def exceptionTag(
+    response: HttpResponse[_]
+  ): Option[String] =
+    response.headers().firstValue(ExceptionTagHeader).toScala.filterNot(_.isBlank)
+
+
+  private def parseExceptionBlock[O](
+    status: Int,
+    expectedTag: Option[String],
+    afterMarker: fs2.Stream[F, String]
+  ): fs2.Pull[F, O, Unit] =
+    afterMarker.pull.uncons1.flatMap {
+      case None =>
+        fs2.Pull.raiseError[F](
+          FS2CHQueryFailed(status, s"Booom! $ExceptionMarker")
+        )
+      case Some((tagLine, tail)) =>
+        expectedTag match {
+          case Some(tag) if tagLine.trim == tag =>
+            collectExceptionMessage(status, tag, Vector.empty, tail)
+          case _ =>
+            fs2.Pull
+              .eval(
+                joinLines(
+                  fs2.Stream(ExceptionMarker, tagLine) ++ tail
+                )
+              )
+              .flatMap(fullErr =>
+                fs2.Pull.raiseError[F](FS2CHQueryFailed(status, s"Booom! $fullErr"))
+              )
+        }
+    }
+
+  /** Accumulates the lines between the tag line and the closing line:
+   * 
+    * {{{
+    * <valid data>
+    *
+    * __exception__
+    * <TAG>
+    * <error message>
+    * <message_length> <TAG>
+    * __exception__
+    * }}}
+    * the tag line (`<TAG>`) and the closing line (`<message_length> <TAG>`)
+    * are delimiters and `<error message>` is an actual error 
+    */
+  private def collectExceptionMessage[O](
+    status: Int,
+    tag: String,
+    messageLines: Vector[String],
+    remaining: fs2.Stream[F, String]
+  ): fs2.Pull[F, O, Unit] =
+    remaining.pull.uncons1.flatMap {
+      case Some((line, _)) if line.trim.endsWith(s" $tag") =>
+        // closing line
+        fs2.Pull.raiseError[F](
+          FS2CHQueryFailed(status, messageLines.mkString("\n"))
+        )
+      case Some((line, tail)) =>
+        collectExceptionMessage(status, tag, messageLines :+ line, tail)
+      case None =>
+        fs2.Pull.raiseError[F](
+          FS2CHQueryFailed(status, messageLines.mkString("\n"))
+        )
+    }
 
   /** Decodes each line of a 200-status body as a row of `T`, but stops at
     * the first line that doesn't look like a JSONEachRow object. Clickhouse
     * can commit to a 200 status and then fail mid-query, appending its
-    * exception text as a plain line instead of a JSON row since it can no
-    * longer switch the response status. Rows decoded before that line have
-    * already been emitted; the offending line and everything after it are
-    * collected and raised as FS2CHQueryFailed, without being fed to the
-    * decoder.
+    * exception text instead of a JSON row since it can no longer switch the
+    * response status. Rows decoded before that line have already been
+    * emitted; the offending line and everything after it are collected and
+    * raised as FS2CHQueryFailed, without being fed to the decoder.
+    *
+    * A `__exception__` line is recognized as Clickhouse's documented
+    * mid-stream error marker (see `parseExceptionBlock`) and, when its shape
+    * checks out, only the actual error message is surfaced. Anything else
+    * that doesn't look like a JSON row - including a `__exception__` line
+    * whose shape doesn't check out - is treated as opaque error text, same
+    * as older Clickhouse versions that predate the marker.
     *
     * A `{`-prefixed line that fails to decode is left alone: that failure
     * propagates as-is (not relabeled as a server-side error).
     */
   private[internal] def decodeRows[T](
     status: Int,
-    lines: fs2.Stream[F, String]
+    lines: fs2.Stream[F, String],
+    exceptionTag: Option[String] = None
   )(implicit decoder: JsonRowDecoder[F, T]): fs2.Stream[F, T] = {
 
-    def go(remaining: fs2.Stream[F, String]): fs2.Pull[F, T, Unit] =
-      remaining.pull.uncons1.flatMap {
+    def process(stream: fs2.Stream[F, String]): fs2.Pull[F, T, Unit] =
+      stream.pull.uncons1.flatMap {
         case None =>
           fs2.Pull.done
-        case Some((line, tail)) if isJsonObjectLine(line) =>
-          fs2.Pull.eval(decoder.decode(line).value).flatMap {
-            case Right(value) => fs2.Pull.output1(value) >> go(tail)
-            case Left(err)    => fs2.Pull.raiseError[F](err)
-          }
         case Some((line, tail)) =>
-          fs2.Pull
-            .eval(joinLines(fs2.Stream.emit(line) ++ tail))
-            .flatMap(fullErr =>
-              fs2.Pull.raiseError[F](
-                FS2CHQueryFailed(status, s"Booom! $fullErr")
-              )
-            )
+          line.trim match {
+            case trimmed if trimmed.startsWith("{") =>
+              fs2.Pull.eval(decoder.decode(line).value).flatMap {
+                case Right(value) => fs2.Pull.output1(value) >> process(tail)
+                case Left(err)    => fs2.Pull.raiseError[F](err)
+              }
+            case ExceptionMarker =>
+              parseExceptionBlock(status, exceptionTag, tail)
+            case _ =>
+              // it's not a valid data but also is not an exception marker,
+              // so must be older exception format, going to drain it
+              fs2.Pull
+                .eval(joinLines(fs2.Stream.emit(line) ++ tail))
+                .flatMap(fullErr =>
+                  fs2.Pull.raiseError[F](
+                    FS2CHQueryFailed(status, s"Booom! $fullErr")
+                  )
+                )
+          }
       }
 
-    go(lines).stream
+    process(lines).stream
   }
 
   // TODO: let's make a compositional decoder which first tries to decode product and if fails proceeds to
@@ -288,44 +387,47 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           for {
             response <- sendRequest(request)
             status = response.statusCode()
-            bodyByteStream = fs2.io
-              .readInputStream[F](Async[F].delay(response.body()), chunkSize)
+            tag = exceptionTag(response)
+            bodyByteStream =
+              fs2.io.readInputStream[F](Async[F].delay(response.body()), chunkSize)
             bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
             _ <-
               if (status != Http.Ok)
                 readErrorAndDrain(status, bodyLineStream).compile.drain
               else
-                drainOrFail(status, bodyLineStream)
+                drainOrFail(status, bodyLineStream, tag)
           } yield ()
         }
         .compile
         .lastOrError
     } yield result
 
-  /** Insert responses are expected to have an empty body on success. Same
-    * underlying failure mode as `decodeRows` (Clickhouse committing to 200
-    * and then failing mid-stream), but since a successful insert body never
-    * has any content, the mere presence of a line is the signal that
-    * something failed.
+  /** Insert responses are expected to have an empty body on success.
+    * Same underlying failure mode as `decodeRows` (Clickhouse committing to 200
+    * and then failing mid-stream) but response body is supposed to be empty,
+   * so if it's not - something went wrong
     */
   private[internal] def drainOrFail(
     status: Int,
-    bodyLineStream: fs2.Stream[F, String]
-  ): F[Unit] =
-    bodyLineStream.pull.uncons1
-      .flatMap {
+    bodyLineStream: fs2.Stream[F, String],
+    exceptionTag: Option[String] = None
+  ): F[Unit] = {
+    def process(stream: fs2.Stream[F, String]): fs2.Pull[F, Nothing, Unit] =
+      stream.pull.uncons1.flatMap {
         case None =>
           fs2.Pull.done
-        case Some((line, rest)) =>
+        case Some((line, tail)) if line.trim == ExceptionMarker =>
+          parseExceptionBlock(status, exceptionTag, tail)
+        case Some((line, tail)) =>
           fs2.Pull.eval(
-            joinLines(fs2.Stream.emit(line) ++ rest).flatMap(fullErr =>
+            joinLines(fs2.Stream.emit(line) ++ tail).flatMap(fullErr =>
               FS2CHQueryFailed(status, s"Booom! $fullErr").raiseError[F, Unit]
             )
           )
       }
-      .stream
-      .compile
-      .drain
+
+    process(bodyLineStream).stream.compile.drain
+  }
 
 }
 
