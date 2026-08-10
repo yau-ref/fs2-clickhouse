@@ -1,5 +1,7 @@
 # fs2-clickhouse
 
+[![Continuous Integration](https://github.com/yau-ref/fs2-clickhouse/actions/workflows/scala.yml/badge.svg)](https://github.com/yau-ref/fs2-clickhouse/actions/workflows/scala.yml)
+
 An fs2 / cats-effect streaming client for ClickHouse, built on its HTTP interface.
 
 ## Requirements
