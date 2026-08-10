@@ -76,7 +76,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   )(implicit encoder: JsonRowEncoder[F, T]): fs2.Stream[F, Byte] =
     stream
       .flatMap(encoded => fs2.Stream.fromEither(encoded))
-      .intersperse("\n") // TODO: double check this
+      .intersperse("\n")
       .through(fs2.text.utf8.encode)
       .through(compression.compress)
 
