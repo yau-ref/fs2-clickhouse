@@ -2,6 +2,11 @@
 
 An fs2 / cats-effect streaming client for ClickHouse, built on its HTTP interface.
 
+## Requirements
+
+- Scala 2.13 or 3
+- JDK 11+
+
 ## Features
 
 - Stream query results from ClickHouse
