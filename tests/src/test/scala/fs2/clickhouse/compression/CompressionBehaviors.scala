@@ -48,33 +48,37 @@ trait CompressionBehaviors {
 
   }
 
-  def integratedDecompressionBehavior(compression: Compression) = {
-    "decompress data from clickhouse" in withContainers { implicit clickHouseContainer =>
-      // Checks that provided compression can decompress data compressed by clickhouse.
-      // This helps to check whether compression uses parameters compatible
-      val users = TestData.users()
-      withConnection { connection =>
-        val statement = connection.createStatement()
-        statement.execute("create table users ( name text, age Int8) Engine = MergeTree() order by name")
-        users.foreach(user =>
-          statement.execute(s"insert into users values ('${user.name}', ${user.age})")
-        )
-      }
-      fs2.Stream
-        .resource(
-          ClickhouseStream
-            .http[IO](
-              hostName,
-              httpApiPort,
-              Credentials(username, Some(password)),
-              compression = compression
+  def integratedDecompressionBehavior(compression: Compression) =
+    "decompress data from clickhouse" in withContainers {
+      implicit clickHouseContainer =>
+        // Checks that provided compression can decompress data compressed by clickhouse.
+        // This helps to check whether compression uses parameters compatible
+        val users = TestData.users()
+        withConnection { connection =>
+          val statement = connection.createStatement()
+          statement.execute(
+            "create table users ( name text, age Int8) Engine = MergeTree() order by name"
+          )
+          users.foreach(user =>
+            statement.execute(
+              s"insert into users values ('${user.name}', ${user.age})"
             )
-        )
-        .flatMap(_.query("select * from test.users"))
-        .compile
-        .toList
-        .map(_ should have size (users.length))
+          )
+        }
+        fs2.Stream
+          .resource(
+            ClickhouseStream
+              .http[IO](
+                hostName,
+                httpApiPort,
+                Credentials(username, Some(password)),
+                compression = compression
+              )
+          )
+          .flatMap(_.query("select * from test.users"))
+          .compile
+          .toList
+          .map(_ should have size (users.length))
     }
-  }
 
 }

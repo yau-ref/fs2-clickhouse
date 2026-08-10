@@ -8,7 +8,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 
 class GZIPCompressionTest
-  extends AsyncWordSpec
+    extends AsyncWordSpec
     with AsyncIOSpec
     with Matchers
     with Inspectors
@@ -16,11 +16,14 @@ class GZIPCompressionTest
     with TestContainerHelpers
     with WithConnection
     with CompressionBehaviors {
-  
+
   "GZIPCompression" should {
-    behave like decompressionBehavior(GZIP, "helloworld\n", "H4sIAAAAAAAAA8tIzcnJL88vyknhAgDmMkmaCwAAAA==")
+    behave like decompressionBehavior(
+      GZIP,
+      "helloworld\n",
+      "H4sIAAAAAAAAA8tIzcnJL88vyknhAgDmMkmaCwAAAA=="
+    )
     behave like integratedDecompressionBehavior(GZIP)
   }
-  
-}
 
+}

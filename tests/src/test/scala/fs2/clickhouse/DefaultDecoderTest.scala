@@ -5,12 +5,10 @@ import org.scalatest.Inspectors
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
-class DefaultDecoderTest
-  extends AnyWordSpec
-    with Matchers
-    with Inspectors {
+class DefaultDecoderTest extends AnyWordSpec with Matchers with Inspectors {
 
-  private val clickhouse: ClickhouseStream[IO] = null // null doesn't matter for this group of tests
+  private val clickhouse: ClickhouseStream[IO] =
+    null // null doesn't matter for this group of tests
 
   "default decoder" should {
     "be provided" when {

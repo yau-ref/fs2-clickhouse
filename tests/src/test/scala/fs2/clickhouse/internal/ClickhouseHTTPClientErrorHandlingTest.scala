@@ -10,9 +10,7 @@ import org.scalatest.wordspec.AnyWordSpec
 
 import java.net.http.HttpClient
 
-class ClickhouseHTTPClientErrorHandlingTest
-  extends AnyWordSpec
-    with Matchers {
+class ClickhouseHTTPClientErrorHandlingTest extends AnyWordSpec with Matchers {
 
   // never actually sends a request in this suite - decodeRows/drainOrFail
   // only operate on already-materialized line streams
@@ -26,7 +24,8 @@ class ClickhouseHTTPClientErrorHandlingTest
 
   private def failingDecoder(err: Throwable): JsonRowDecoder[IO, String] =
     new JsonRowDecoder[IO, String] {
-      override def decode(json: String): DecodedRow = EitherT.leftT[IO, String](err)
+      override def decode(json: String): DecodedRow =
+        EitherT.leftT[IO, String](err)
     }
 
   "decodeRows" should {
@@ -102,7 +101,9 @@ class ClickhouseHTTPClientErrorHandlingTest
       result match {
         case Left(e: FS2CHQueryFailed) =>
           e.statusCode shouldBe 200
-          e.getMessage should include("response stream failed after some rows had already been decoded")
+          e.getMessage should include(
+            "response stream failed after some rows had already been decoded"
+          )
           e.cause shouldBe Some(boom)
         case other =>
           fail(s"expected Left(FS2CHQueryFailed), got $other")
@@ -115,7 +116,12 @@ class ClickhouseHTTPClientErrorHandlingTest
       val lines = fs2.Stream("""{"a":1}""")
 
       val result =
-        client.decodeRows[String](200, lines).compile.drain.attempt.unsafeRunSync()
+        client
+          .decodeRows[String](200, lines)
+          .compile
+          .drain
+          .attempt
+          .unsafeRunSync()
 
       result shouldBe Left(boom)
     }
@@ -159,7 +165,12 @@ class ClickhouseHTTPClientErrorHandlingTest
       )
 
       val result =
-        client.decodeRows[String](200, lines).compile.drain.attempt.unsafeRunSync()
+        client
+          .decodeRows[String](200, lines)
+          .compile
+          .drain
+          .attempt
+          .unsafeRunSync()
 
       result match {
         case Left(e: FS2CHQueryFailed) =>
@@ -204,14 +215,16 @@ class ClickhouseHTTPClientErrorHandlingTest
     "fall back to raising the raw block as opaque error text when the line after __exception__ doesn't look like a tag" in {
       implicit val decoder: JsonRowDecoder[IO, String] =
         JsonRowDecoder.stringDecoder[IO]
-      val lines = fs2.Stream(
-        "__exception__",
-        "this is not a tag",
-        "more context"
-      )
+      val lines =
+        fs2.Stream("__exception__", "this is not a tag", "more context")
 
       val result =
-        client.decodeRows[String](200, lines).compile.drain.attempt.unsafeRunSync()
+        client
+          .decodeRows[String](200, lines)
+          .compile
+          .drain
+          .attempt
+          .unsafeRunSync()
 
       result match {
         case Left(e: FS2CHQueryFailed) =>
@@ -248,7 +261,8 @@ class ClickhouseHTTPClientErrorHandlingTest
     "attach the original failure as cause when the connection fails while draining error content" in {
       val boom = new RuntimeException("connection reset")
       val lines =
-        fs2.Stream("Code: 241. DB::Exception: boom") ++ fs2.Stream.raiseError[IO](boom)
+        fs2.Stream("Code: 241. DB::Exception: boom") ++ fs2.Stream
+          .raiseError[IO](boom)
 
       val result = client.drainOrFail(200, lines).attempt.unsafeRunSync()
 
@@ -329,11 +343,8 @@ class ClickhouseHTTPClientErrorHandlingTest
     }
 
     "fall back to raising the raw block as opaque error text when the line after __exception__ doesn't look like a tag" in {
-      val lines = fs2.Stream(
-        "__exception__",
-        "this is not a tag",
-        "more context"
-      )
+      val lines =
+        fs2.Stream("__exception__", "this is not a tag", "more context")
 
       val result = client.drainOrFail(200, lines).attempt.unsafeRunSync()
 

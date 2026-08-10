@@ -96,9 +96,22 @@ object TestData {
         "Herbivore/Omnivore",
         "Carnivore/Omnivore"
       )
-    } yield Animal(name, animalType, whenLived, sizeInMeters, whenDiscovered, location, color, food)
+    } yield Animal(
+      name,
+      animalType,
+      whenLived,
+      sizeInMeters,
+      whenDiscovered,
+      location,
+      color,
+      food
+    )
 
   def animals(num: Int = 300): Vector[Animal] =
-    LazyList.continually(Gen.listOfN(num, animalGen).sample).flatten.head.toVector
+    LazyList
+      .continually(Gen.listOfN(num, animalGen).sample)
+      .flatten
+      .head
+      .toVector
 
 }
