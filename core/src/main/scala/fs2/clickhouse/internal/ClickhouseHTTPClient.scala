@@ -1,6 +1,5 @@
 package fs2.clickhouse.internal
 
-import cats.data.EitherT
 import cats.effect.Async
 import cats.effect.Resource
 import cats.syntax.all._
@@ -8,10 +7,8 @@ import fs2.Pipe
 import fs2.clickhouse.compression.Compression
 import fs2.clickhouse.exceptions._
 import fs2.clickhouse.internal.ClickhouseHTTPClient.{
-  errorDecoder,
   ClickhousePasswordHeader,
   ClickhouseUserHeader,
-  ErrorMessage,
   Http
 }
 
@@ -236,11 +233,6 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     process(lines).stream
   }
 
-  // TODO: let's make a compositional decoder which first tries to decode product and if fails proceeds to
-  //  decoding error (or visa versa); Also it should not just decoder errors but meta info too (and for now ignore it)
-  // TODO: actually reconsider if it's even needed
-  private val errDec: JsonRowDecoder[F, ErrorMessage] = errorDecoder[F]
-
   private def timeoutToJavaTime(timeout: FiniteDuration) =
     java.time.Duration.ofNanos(timeout.toNanos)
 
@@ -415,13 +407,5 @@ object ClickhouseHTTPClient {
 
   private val ClickhouseUserHeader = "X-ClickHouse-User"
   private val ClickhousePasswordHeader = "X-ClickHouse-Key"
-
-  def errorDecoder[F[_]: Async]: JsonRowDecoder[F, ErrorMessage] =
-    new JsonRowDecoder[F, ErrorMessage] {
-      override def decode(json: String): DecodedRow =
-        EitherT.right(ErrorMessage(json).pure[F])
-    }
-
-  case class ErrorMessage(error: String)
 
 }
