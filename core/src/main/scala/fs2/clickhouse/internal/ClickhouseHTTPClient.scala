@@ -49,7 +49,6 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           decodeRows(status, bodyLineStream, tag)
     } yield decodedElement
 
-  
   private def readBody(
     response: HttpResponse[InputStream]
   ): (Int, Option[String], fs2.Stream[F, String]) = {
@@ -134,8 +133,8 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
 
   /** Like `drainLines`, but - since this is used at the top level, where a
     * drained-away failure would otherwise be indistinguishable from
-    * Clickhouse's own benign mid-stream termination (see `decodeRows`) -
-    * also surfaces the first failure encountered instead of discarding it.
+    * Clickhouse's own benign mid-stream termination (see `decodeRows`) - also
+    * surfaces the first failure encountered instead of discarding it.
     */
   private[internal] def joinLines(
     lines: fs2.Stream[F, String]
