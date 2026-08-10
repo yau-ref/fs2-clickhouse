@@ -59,3 +59,17 @@ fs2.Stream
   .compile
   .drain
 ```
+
+### Compression
+
+By default requests/responses are gzip-compressed. Pass a different `Compression` to pick another codec, e.g. LZ4 or ZSTD from the [compression](compression/README.md) module, or `NoCompression` to disable it:
+
+```scala
+import fs2.clickhouse.compression.{LZ4, NoCompression}
+
+fs2.Stream
+  .resource(ClickhouseStream.http[IO]("localhost", compression = LZ4))
+  .flatMap(_.query[User]("select * from users"))
+  .compile
+  .toList
+```
