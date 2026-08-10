@@ -34,6 +34,38 @@ import io.circe.generic.auto._
 case class User(name: String, age: Int)
 ```
 
+### Connecting
+
+`ClickhouseStream.http` returns a `Resource[F, ClickhouseClient[F]]`: acquiring
+it creates a Java `HttpClient` (and its connection pool), and the client is
+only valid for the lifetime of that `Resource`. There's no explicit `close` —
+the underlying `HttpClient` is left for the GC to reclaim once the resource
+scope ends (Java's `HttpClient` only became `AutoCloseable` in 21, and this
+library targets JDK 11+), but the `Resource` boundary is still what you
+should treat as the connection's lifetime: acquire once per logical
+connection/session, reuse it for all queries and inserts within that scope,
+and let it close when you're done rather than re-acquiring per call.
+
+```scala
+ClickhouseStream.http[IO]("localhost").use { clickhouse =>
+  clickhouse.query[User]("select * from users").compile.toList
+}
+```
+
+or, composed into a larger stream via `fs2.Stream.resource` as in the
+examples below.
+
+By default connections are unauthenticated (`auth = NoAuth`). Pass
+`Credentials(user, password)` for explicit credentials, or `FromEnv` to read
+`CLICKHOUSE_USER`/`CLICKHOUSE_PASSWORD` from the environment:
+
+```scala
+import fs2.clickhouse.internal.{Credentials, FromEnv}
+
+ClickhouseStream.http[IO]("localhost", auth = Credentials("default", Some("secret")))
+ClickhouseStream.http[IO]("localhost", auth = FromEnv)
+```
+
 ### Query
 
 ```scala
