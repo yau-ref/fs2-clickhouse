@@ -127,8 +127,8 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       )
 
   /** When http_write_exception_in_output_format=0 (the default), Clickhouse
-    * wraps a mid-stream error in a self-delimiting block, regardless of
-    * output format:
+    * wraps a mid-stream error in a self-delimiting block, regardless of output
+    * format:
     * {{{
     * __exception__
     * <TAG>
@@ -138,9 +138,9 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     * }}}
     * `<TAG>` is a random token, echoed up front in the
     * `X-ClickHouse-Exception-Tag` response header - so it's known before the
-    * body is read, and can be used to confirm a `__exception__` line is
-    * really the protocol marker rather than coincidental row content.
-    * See "HTTP response codes caveats" at https://clickhouse.com/docs/interfaces/http
+    * body is read, and can be used to confirm a `__exception__` line is really
+    * the protocol marker rather than coincidental row content. See "HTTP
+    * response codes caveats" at https://clickhouse.com/docs/interfaces/http
     */
   private[internal] val ExceptionMarker = "__exception__"
   private val ExceptionTagHeader = "X-ClickHouse-Exception-Tag"
@@ -148,8 +148,11 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
   private[internal] def exceptionTag(
     response: HttpResponse[_]
   ): Option[String] =
-    response.headers().firstValue(ExceptionTagHeader).toScala.filterNot(_.isBlank)
-
+    response
+      .headers()
+      .firstValue(ExceptionTagHeader)
+      .toScala
+      .filterNot(_.isBlank)
 
   private def parseExceptionBlock[O](
     status: Int,
@@ -167,19 +170,16 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
             collectExceptionMessage(status, tag, Vector.empty, tail)
           case _ =>
             fs2.Pull
-              .eval(
-                joinLines(
-                  fs2.Stream(ExceptionMarker, tagLine) ++ tail
-                )
-              )
+              .eval(joinLines(fs2.Stream(ExceptionMarker, tagLine) ++ tail))
               .flatMap(fullErr =>
-                fs2.Pull.raiseError[F](FS2CHQueryFailed(status, s"Booom! $fullErr"))
+                fs2.Pull
+                  .raiseError[F](FS2CHQueryFailed(status, s"Booom! $fullErr"))
               )
         }
     }
 
   /** Accumulates the lines between the tag line and the closing line:
-   * 
+    *
     * {{{
     * <valid data>
     *
@@ -189,8 +189,8 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
     * <message_length> <TAG>
     * __exception__
     * }}}
-    * the tag line (`<TAG>`) and the closing line (`<message_length> <TAG>`)
-    * are delimiters and `<error message>` is an actual error 
+    * the tag line (`<TAG>`) and the closing line (`<message_length> <TAG>`) are
+    * delimiters and `<error message>` is an actual error
     */
   private def collectExceptionMessage[O](
     status: Int,
@@ -212,20 +212,20 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         )
     }
 
-  /** Decodes each line of a 200-status body as a row of `T`, but stops at
-    * the first line that doesn't look like a JSONEachRow object. Clickhouse
-    * can commit to a 200 status and then fail mid-query, appending its
-    * exception text instead of a JSON row since it can no longer switch the
-    * response status. Rows decoded before that line have already been
-    * emitted; the offending line and everything after it are collected and
-    * raised as FS2CHQueryFailed, without being fed to the decoder.
+  /** Decodes each line of a 200-status body as a row of `T`, but stops at the
+    * first line that doesn't look like a JSONEachRow object. Clickhouse can
+    * commit to a 200 status and then fail mid-query, appending its exception
+    * text instead of a JSON row since it can no longer switch the response
+    * status. Rows decoded before that line have already been emitted; the
+    * offending line and everything after it are collected and raised as
+    * FS2CHQueryFailed, without being fed to the decoder.
     *
-    * A `__exception__` line is recognized as Clickhouse's documented
-    * mid-stream error marker (see `parseExceptionBlock`) and, when its shape
-    * checks out, only the actual error message is surfaced. Anything else
-    * that doesn't look like a JSON row - including a `__exception__` line
-    * whose shape doesn't check out - is treated as opaque error text, same
-    * as older Clickhouse versions that predate the marker.
+    * A `__exception__` line is recognized as Clickhouse's documented mid-stream
+    * error marker (see `parseExceptionBlock`) and, when its shape checks out,
+    * only the actual error message is surfaced. Anything else that doesn't look
+    * like a JSON row - including a `__exception__` line whose shape doesn't
+    * check out - is treated as opaque error text, same as older Clickhouse
+    * versions that predate the marker.
     *
     * A `{`-prefixed line that fails to decode is left alone: that failure
     * propagates as-is (not relabeled as a server-side error).
@@ -255,9 +255,8 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
               fs2.Pull
                 .eval(joinLines(fs2.Stream.emit(line) ++ tail))
                 .flatMap(fullErr =>
-                  fs2.Pull.raiseError[F](
-                    FS2CHQueryFailed(status, s"Booom! $fullErr")
-                  )
+                  fs2.Pull
+                    .raiseError[F](FS2CHQueryFailed(status, s"Booom! $fullErr"))
                 )
           }
       }
@@ -389,7 +388,10 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
             status = response.statusCode()
             tag = exceptionTag(response)
             bodyByteStream =
-              fs2.io.readInputStream[F](Async[F].delay(response.body()), chunkSize)
+              fs2.io.readInputStream[F](
+                Async[F].delay(response.body()),
+                chunkSize
+              )
             bodyLineStream = decompress(bodyByteStream).filterNot(_.isBlank)
             _ <-
               if (status != Http.Ok)
@@ -402,10 +404,10 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
         .lastOrError
     } yield result
 
-  /** Insert responses are expected to have an empty body on success.
-    * Same underlying failure mode as `decodeRows` (Clickhouse committing to 200
-    * and then failing mid-stream) but response body is supposed to be empty,
-   * so if it's not - something went wrong
+  /** Insert responses are expected to have an empty body on success. Same
+    * underlying failure mode as `decodeRows` (Clickhouse committing to 200 and
+    * then failing mid-stream) but response body is supposed to be empty, so if
+    * it's not - something went wrong
     */
   private[internal] def drainOrFail(
     status: Int,
