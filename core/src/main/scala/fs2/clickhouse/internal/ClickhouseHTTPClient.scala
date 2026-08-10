@@ -351,7 +351,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       withAuthHeaders(builderWithTimeout, auth)
         // TODO: JSONEachRowWithProgress allows getting progress data, would be cool
         //   to take it and provide as a side-stream
-        .map(_.header("X-ClickHouse-Format", "JSONEachRow"))
+        .map(_.header("X-ClickHouse-Format", ClickhouseHTTPClient.JsonEachRowFormat))
         .map(builder =>
           compression.acceptEncoding
             .fold(builder)(builder.header("Accept-Encoding", _))
@@ -374,13 +374,19 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           .fold(builder)(builder.header("Content-Encoding", _))
       )
   }
+  
+  // unlike query output (X-ClickHouse-Format header), Clickhouse only
+  // accepts the insert's input format as part of the statement text
+  // TODO: check this again later
+  private[internal] def withFormatClause(statement: String): String =
+    s"$statement FORMAT ${ClickhouseHTTPClient.JsonEachRowFormat}"
 
   // compose the body stream from the statement and the values
   private[internal] def insertBodyLines[T](
     statement: String,
     stream: fs2.Stream[F, T]
   )(implicit encoder: JsonRowEncoder[F, T]) =
-    fs2.Stream.emit(Right(statement)) ++
+    fs2.Stream.emit(Right(withFormatClause(statement))) ++
       stream.map(encoder.encode).evalMap(_.value)
 
   override def insert[T](
@@ -463,5 +469,7 @@ object ClickhouseHTTPClient {
 
   private val ClickhouseUserHeader = "X-ClickHouse-User"
   private val ClickhousePasswordHeader = "X-ClickHouse-Key"
+
+  private[internal] val JsonEachRowFormat = "JSONEachRow"
 
 }
