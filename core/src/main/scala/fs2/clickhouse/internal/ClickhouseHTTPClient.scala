@@ -351,7 +351,12 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
       withAuthHeaders(builderWithTimeout, auth)
         // TODO: JSONEachRowWithProgress allows getting progress data, would be cool
         //   to take it and provide as a side-stream
-        .map(_.header("X-ClickHouse-Format", ClickhouseHTTPClient.JsonEachRowFormat))
+        .map(
+          _.header(
+            "X-ClickHouse-Format",
+            ClickhouseHTTPClient.JsonEachRowFormat
+          )
+        )
         .map(builder =>
           compression.acceptEncoding
             .fold(builder)(builder.header("Accept-Encoding", _))
@@ -374,7 +379,7 @@ class ClickhouseHTTPClient[F[_]: Async] private[internal] (
           .fold(builder)(builder.header("Content-Encoding", _))
       )
   }
-  
+
   // unlike query output (X-ClickHouse-Format header), Clickhouse only
   // accepts the insert's input format as part of the statement text
   // TODO: check this again later
