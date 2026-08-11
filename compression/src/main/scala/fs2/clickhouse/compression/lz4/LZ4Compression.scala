@@ -3,7 +3,12 @@ package fs2.clickhouse.compression.lz4
 import cats.effect.Async
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
-import fs2.io.{readInputStream, readOutputStream, toInputStream, writeOutputStream}
+import fs2.io.{
+  readInputStream,
+  readOutputStream,
+  toInputStream,
+  writeOutputStream
+}
 import org.apache.commons.compress.compressors.lz4.{
   FramedLZ4CompressorInputStream,
   FramedLZ4CompressorOutputStream
@@ -39,7 +44,8 @@ class LZ4Compression private (chunkSize: Int = 1000) extends Compression {
           writeOutputStream[F](
             Async[F].delay(new FramedLZ4CompressorOutputStream(os))
           )
-        ).compile.drain
+        ).compile
+          .drain
       }
 
 }

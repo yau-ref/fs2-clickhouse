@@ -61,7 +61,10 @@ trait CompressionBehaviors {
         .toVector
         .map(_ shouldBe empty)
 
-  def compressionRoundTripBehavior(compression: Compression, sampleData: String) =
+  def compressionRoundTripBehavior(
+    compression: Compression,
+    sampleData: String
+  ) =
     "round-trip compress and decompress data" in
       // Checks that data compressed by this codec can be decompressed back
       // to itself, catching codecs whose compress side is broken/unimplemented.
@@ -103,7 +106,8 @@ trait CompressionBehaviors {
           fs2.Stream
             .emits(users)
             .through(
-              clickhouse.insert[TestData.User]("insert into test.insert_behavior_users")
+              clickhouse
+                .insert[TestData.User]("insert into test.insert_behavior_users")
             )
         )
         .compile
@@ -115,7 +119,8 @@ trait CompressionBehaviors {
               val resultSet = statement.executeQuery(
                 "select name, age from test.insert_behavior_users"
               )
-              val buffer = scala.collection.mutable.ArrayBuffer.empty[TestData.User]
+              val buffer =
+                scala.collection.mutable.ArrayBuffer.empty[TestData.User]
               while (resultSet.next())
                 buffer += TestData.User(
                   resultSet.getString("name"),
