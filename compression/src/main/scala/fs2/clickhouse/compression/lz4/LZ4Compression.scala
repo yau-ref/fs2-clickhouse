@@ -4,6 +4,10 @@ import cats.effect.Async
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
 import fs2.io.{readInputStream, toInputStream}
+import org.apache.commons.compress.compressors.lz4.FramedLZ4CompressorOutputStream.{
+  BlockSize,
+  Parameters
+}
 import org.apache.commons.compress.compressors.lz4.{
   FramedLZ4CompressorInputStream,
   FramedLZ4CompressorOutputStream
@@ -19,6 +23,12 @@ class LZ4Compression private (chunkSize: Int = 1000) extends Compression {
   // Clickhouse uses lz4 frame format with dependent blocks
   // https://github.com/ClickHouse/ClickHouse/blob/master/src/IO/Lz4DeflatingWriteBuffer.cpp
   //
+  // FramedLZ4CompressorOutputStream defaults to independent blocks, which a
+  // spec-compliant reader can still decode, but we match Clickhouse's own
+  // writer here rather than relying on that leniency
+  private val compressionParameters =
+    new Parameters(BlockSize.M4, true, false, true)
+
   // FramedLZ4CompressorInputStream reads/validates the frame header eagerly
   // in its constructor, throwing on empty input - see Compression.skipIfEmpty
   override def decompress[F[_]: Async]: Pipe[F, Byte, Byte] =
@@ -33,7 +43,9 @@ class LZ4Compression private (chunkSize: Int = 1000) extends Compression {
     }
 
   override def compress[F[_]: Async]: Pipe[F, Byte, Byte] =
-    Compression.compressWith(chunkSize)(new FramedLZ4CompressorOutputStream(_))
+    Compression.compressWith(chunkSize)(
+      new FramedLZ4CompressorOutputStream(_, compressionParameters)
+    )
 
 }
 
