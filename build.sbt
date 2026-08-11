@@ -1,4 +1,5 @@
 import sbt.Keys.libraryDependencies
+import sbtassembly.AssemblyPlugin.autoImport._
 
 ThisBuild / version := "0.1.0"
 
@@ -21,6 +22,17 @@ lazy val commonSettings = Seq(
   }
 )
 
+lazy val assemblySettings = Seq(
+  assembly / assemblyJarName := s"${name.value}-${version.value}.jar",
+  assembly / assemblyMergeStrategy := {
+    case PathList("module-info.class")        => MergeStrategy.discard
+    case x if x.endsWith("module-info.class") => MergeStrategy.discard
+    case x =>
+      val oldStrategy = (assembly / assemblyMergeStrategy).value
+      oldStrategy(x)
+  }
+)
+
 lazy val root = (project in file("."))
   .aggregate(core, circe, compression, tests)
   .settings(
@@ -31,6 +43,7 @@ lazy val root = (project in file("."))
 
 lazy val core = (project in file("core"))
   .settings(commonSettings)
+  .settings(assemblySettings)
   .settings(
     name := "fs2-clickhouse-core",
     libraryDependencies ++= Seq(
@@ -42,6 +55,7 @@ lazy val core = (project in file("core"))
 
 lazy val circe = (project in file("circe"))
   .settings(commonSettings)
+  .settings(assemblySettings)
   .settings(
     name := "fs2-clickhouse-circe",
     libraryDependencies ++= Seq(
@@ -53,6 +67,7 @@ lazy val circe = (project in file("circe"))
 
 lazy val compression = (project in file("compression"))
   .settings(commonSettings)
+  .settings(assemblySettings)
   .settings(
     name := "fs2-clickhouse-compression",
     libraryDependencies ++= Seq(
