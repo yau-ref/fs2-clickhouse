@@ -48,6 +48,31 @@ trait CompressionBehaviors {
 
   }
 
+  def emptyDecompressionBehavior(compression: Compression) =
+    "decompress an empty stream to an empty stream" in
+      // Insert responses are expected to have an empty body on success, so
+      // decompress has to handle zero bytes in without erroring.
+      fs2.Stream
+        .empty[IO]
+        .through(compression.decompress[IO])
+        .compile
+        .toVector
+        .map(_ shouldBe empty)
+
+  def compressionRoundTripBehavior(compression: Compression, sampleData: String) =
+    "round-trip compress and decompress data" in
+      // Checks that data compressed by this codec can be decompressed back
+      // to itself, catching codecs whose compress side is broken/unimplemented.
+      fs2.Stream
+        .emits(List(sampleData))
+        .through(fs2.text.utf8.encode[IO])
+        .through(compression.compress[IO])
+        .through(compression.decompress[IO])
+        .compile
+        .toVector
+        .map(bytes => new String(bytes.toArray))
+        .map(_ shouldBe sampleData)
+
   def integratedDecompressionBehavior(compression: Compression) =
     "decompress data from clickhouse" in withContainers {
       implicit clickHouseContainer =>
