@@ -23,6 +23,28 @@ An fs2 / cats-effect streaming client for ClickHouse, built on its HTTP interfac
 - [compression](compression/README.md) — additional compression codecs (LZ4, ZSTD)
 - [tests](tests/README.md) — unit and testcontainers-based integration tests, including property-based tests
 
+## Building an assembly jar
+
+Each published module (`core`, `circe`, `compression`) is set up with
+[sbt-assembly](https://github.com/sbt/sbt-assembly) to produce a fat jar
+bundling its dependencies. Build one with:
+
+```sh
+sbt core/assembly
+sbt circe/assembly
+sbt compression/assembly
+```
+
+or build all of them at once:
+
+```sh
+sbt assembly
+```
+
+The resulting jars are written to each module's `target/scala-<version>/`
+directory, named `<module-name>-<version>.jar` (e.g.
+`fs2-clickhouse-core-0.1.0.jar`).
+
 ## Usage
 
 ```scala
