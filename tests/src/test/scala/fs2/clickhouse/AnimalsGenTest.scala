@@ -4,10 +4,10 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.dimafeng.testcontainers.scalatest.TestContainerForAll
 import fs2.clickhouse.TestData.Animal
-import fs2.clickhouse.circe.*
+import fs2.clickhouse.circe._
 import fs2.clickhouse.compression.NoCompression
 import fs2.clickhouse.internal.Credentials
-import io.circe.generic.auto.*
+import io.circe.generic.auto._
 import org.scalatest.Inspectors
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
