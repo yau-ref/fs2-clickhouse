@@ -24,6 +24,9 @@ class ZSTDCompressionTest
       "KLUv/QRYWQAAaGVsbG93b3JsZAp/WzH0"
     )
     behave like integratedDecompressionBehavior(ZSTD)
+    behave like emptyDecompressionBehavior(ZSTD)
+    behave like compressionRoundTripBehavior(ZSTD, "helloworld\n")
+    behave like integratedInsertBehavior(ZSTD)
   }
 
 }

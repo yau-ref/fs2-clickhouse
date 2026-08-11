@@ -24,6 +24,9 @@ class LZ4CompressionTest
       "BCJNGGRApwsAAIBoZWxsb3dvcmxkCgAAAADxpNsz"
     )
     behave like integratedDecompressionBehavior(LZ4)
+    behave like emptyDecompressionBehavior(LZ4)
+    behave like compressionRoundTripBehavior(LZ4, "helloworld\n")
+    behave like integratedInsertBehavior(LZ4)
   }
 
 }
