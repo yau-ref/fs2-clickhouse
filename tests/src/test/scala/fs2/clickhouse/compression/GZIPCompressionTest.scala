@@ -24,6 +24,8 @@ class GZIPCompressionTest
       "H4sIAAAAAAAAA8tIzcnJL88vyknhAgDmMkmaCwAAAA=="
     )
     behave like integratedDecompressionBehavior(GZIP)
+    behave like emptyDecompressionBehavior(GZIP)
+    behave like compressionRoundTripBehavior(GZIP, "helloworld\n")
   }
 
 }
