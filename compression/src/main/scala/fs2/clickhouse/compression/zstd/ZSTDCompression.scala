@@ -3,8 +3,11 @@ package fs2.clickhouse.compression.zstd
 import cats.effect.Async
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
-import fs2.io.{readInputStream, toInputStream}
-import org.apache.commons.compress.compressors.zstandard.ZstdCompressorInputStream
+import fs2.io.{readInputStream, readOutputStream, toInputStream, writeOutputStream}
+import org.apache.commons.compress.compressors.zstandard.{
+  ZstdCompressorInputStream,
+  ZstdCompressorOutputStream
+}
 
 import java.io.InputStream
 
@@ -13,14 +16,33 @@ class ZSTDCompression private (chunkSize: Int = 1000) extends Compression {
 
   override def acceptEncoding: Option[String] = Some("zstd")
 
+  // an empty body is a valid, expected response (e.g. a successful insert),
+  // so an empty stream has to be short-circuited before it reaches
+  // ZstdCompressorInputStream, in case it validates the frame header eagerly.
   override def decompress[F[_]: Async]: Pipe[F, Byte, Byte] =
-    _.through(toInputStream[F]).flatMap { inputStream =>
-      val decompressed: F[InputStream] =
-        Async[F].delay(new ZstdCompressorInputStream(inputStream))
-      readInputStream[F](decompressed, chunkSize)
-    }
+    _.pull.peek1.flatMap {
+      case None => fs2.Pull.done
+      case Some((_, stream)) =>
+        stream
+          .through(toInputStream[F])
+          .flatMap { inputStream =>
+            val decompressed: F[InputStream] =
+              Async[F].delay(new ZstdCompressorInputStream(inputStream))
+            readInputStream[F](decompressed, chunkSize)
+          }
+          .pull
+          .echo
+    }.stream
 
-  override def compress[F[_]: Async]: Pipe[F, Byte, Byte] = ???
+  override def compress[F[_]: Async]: Pipe[F, Byte, Byte] =
+    in =>
+      readOutputStream[F](chunkSize) { os =>
+        in.through(
+          writeOutputStream[F](
+            Async[F].delay(new ZstdCompressorOutputStream(os))
+          )
+        ).compile.drain
+      }
 }
 
 object ZSTDCompression {
