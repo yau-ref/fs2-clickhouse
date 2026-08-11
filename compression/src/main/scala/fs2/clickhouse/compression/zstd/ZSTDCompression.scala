@@ -3,12 +3,7 @@ package fs2.clickhouse.compression.zstd
 import cats.effect.Async
 import fs2.Pipe
 import fs2.clickhouse.compression.Compression
-import fs2.io.{
-  readInputStream,
-  readOutputStream,
-  toInputStream,
-  writeOutputStream
-}
+import fs2.io.{readInputStream, toInputStream}
 import org.apache.commons.compress.compressors.zstandard.{
   ZstdCompressorInputStream,
   ZstdCompressorOutputStream
@@ -33,15 +28,7 @@ class ZSTDCompression private (chunkSize: Int = 1000) extends Compression {
     }
 
   override def compress[F[_]: Async]: Pipe[F, Byte, Byte] =
-    in =>
-      readOutputStream[F](chunkSize) { os =>
-        in.through(
-          writeOutputStream[F](
-            Async[F].delay(new ZstdCompressorOutputStream(os))
-          )
-        ).compile
-          .drain
-      }
+    Compression.compressWith(chunkSize)(new ZstdCompressorOutputStream(_))
 }
 
 object ZSTDCompression {
