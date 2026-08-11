@@ -7,6 +7,8 @@ import java.sql.{Connection, DriverManager}
 
 trait WithConnection { self: TestContainerHelpers =>
 
+  Class.forName("com.clickhouse.jdbc.ClickHouseDriver")
+
   def withConnection[T](
     action: Connection => T
   )(implicit clickHouseContainer: ClickHouseContainer): T =
