@@ -20,25 +20,17 @@ class LZ4Compression private (chunkSize: Int = 1000) extends Compression {
   // https://github.com/ClickHouse/ClickHouse/blob/master/src/IO/Lz4DeflatingWriteBuffer.cpp
   //
   // FramedLZ4CompressorInputStream reads/validates the frame header eagerly
-  // in its constructor, throwing on empty input - but an empty body is a
-  // valid, expected response (e.g. a successful insert), so an empty stream
-  // has to be short-circuited before reaching it.
+  // in its constructor, throwing on empty input - see Compression.skipIfEmpty
   override def decompress[F[_]: Async]: Pipe[F, Byte, Byte] =
-    _.pull.peek1.flatMap {
-      case None => fs2.Pull.done
-      case Some((_, stream)) =>
-        stream
-          .through(toInputStream[F])
-          .flatMap { inputStream =>
-            val decompressed: F[InputStream] =
-              Async[F].delay(
-                new FramedLZ4CompressorInputStream(inputStream) // not thread safe
-              )
-            readInputStream[F](decompressed, chunkSize)
-          }
-          .pull
-          .echo
-    }.stream
+    Compression.skipIfEmpty { stream =>
+      stream.through(toInputStream[F]).flatMap { inputStream =>
+        val decompressed: F[InputStream] =
+          Async[F].delay(
+            new FramedLZ4CompressorInputStream(inputStream) // not thread safe
+          )
+        readInputStream[F](decompressed, chunkSize)
+      }
+    }
 
   override def compress[F[_]: Async]: Pipe[F, Byte, Byte] =
     in =>

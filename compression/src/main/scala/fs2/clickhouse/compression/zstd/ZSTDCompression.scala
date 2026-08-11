@@ -16,23 +16,16 @@ class ZSTDCompression private (chunkSize: Int = 1000) extends Compression {
 
   override def acceptEncoding: Option[String] = Some("zstd")
 
-  // an empty body is a valid, expected response (e.g. a successful insert),
-  // so an empty stream has to be short-circuited before it reaches
-  // ZstdCompressorInputStream, in case it validates the frame header eagerly.
+  // in case ZstdCompressorInputStream validates the frame header eagerly -
+  // see Compression.skipIfEmpty
   override def decompress[F[_]: Async]: Pipe[F, Byte, Byte] =
-    _.pull.peek1.flatMap {
-      case None => fs2.Pull.done
-      case Some((_, stream)) =>
-        stream
-          .through(toInputStream[F])
-          .flatMap { inputStream =>
-            val decompressed: F[InputStream] =
-              Async[F].delay(new ZstdCompressorInputStream(inputStream))
-            readInputStream[F](decompressed, chunkSize)
-          }
-          .pull
-          .echo
-    }.stream
+    Compression.skipIfEmpty { stream =>
+      stream.through(toInputStream[F]).flatMap { inputStream =>
+        val decompressed: F[InputStream] =
+          Async[F].delay(new ZstdCompressorInputStream(inputStream))
+        readInputStream[F](decompressed, chunkSize)
+      }
+    }
 
   override def compress[F[_]: Async]: Pipe[F, Byte, Byte] =
     in =>
