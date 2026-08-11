@@ -23,6 +23,28 @@ An fs2 / cats-effect streaming client for ClickHouse, built on its HTTP interfac
 - [compression](compression/README.md) — additional compression codecs (LZ4, ZSTD)
 - [tests](tests/README.md) — unit and testcontainers-based integration tests, including property-based tests
 
+## Building an assembly jar
+
+Each published module (`core`, `circe`, `compression`) is set up with
+[sbt-assembly](https://github.com/sbt/sbt-assembly) to produce a fat jar
+bundling its dependencies. Build one with:
+
+```sh
+sbt core/assembly
+sbt circe/assembly
+sbt compression/assembly
+```
+
+or build all of them at once:
+
+```sh
+sbt assembly
+```
+
+The resulting jars are written to each module's `target/scala-<version>/`
+directory, named `<module-name>-<version>.jar` (e.g.
+`fs2-clickhouse-core-0.1.0.jar`).
+
 ## Usage
 
 ```scala
@@ -76,6 +98,18 @@ fs2.Stream
   .toList
 ```
 
+Pass a `timeout` to bound how long the query is allowed to run:
+
+```scala
+import scala.concurrent.duration._
+
+fs2.Stream
+  .resource(ClickhouseStream.http[IO]("localhost"))
+  .flatMap(_.query[User]("select * from users", timeout = Some(30.seconds)))
+  .compile
+  .toList
+```
+
 ### Insert
 
 ```scala
@@ -92,6 +126,21 @@ fs2.Stream
   .drain
 ```
 
+`insert` batches the input stream before sending it: rows are buffered until
+either `maxBatchSize` rows have accumulated or `maxBatchWait` has elapsed
+since the last batch (whichever comes first, default `1000`/`1.second`), and
+each batch is sent as its own HTTP request. This bounds the size/duration of
+any single request and keeps a failure from invalidating rows already
+flushed in earlier batches:
+
+```scala
+import scala.concurrent.duration._
+
+fs2.Stream
+  .emits(users)
+  .through(clickhouse.insert[User]("insert into users", maxBatchSize = 500, maxBatchWait = 5.seconds))
+```
+
 ### Compression
 
 By default requests/responses are gzip-compressed (`compression = GZIP`). Pass a different `Compression` to pick another codec, e.g. LZ4 or ZSTD from the [compression](compression/README.md) module, or `NoCompression` to disable it:
@@ -102,6 +151,38 @@ import fs2.clickhouse.compression.{LZ4, NoCompression}
 fs2.Stream
   .resource(ClickhouseStream.http[IO]("localhost", compression = LZ4))
   .flatMap(_.query[User]("select * from users"))
+  .compile
+  .toList
+```
+
+### Error handling
+
+Failures raised by the client are subtypes of `FS2ClickhouseException`:
+
+- `FS2CHQueryFailed(statusCode, message, cause)` — Clickhouse rejected the
+  query/insert, or the response stream failed partway through after some
+  rows had already been decoded. `statusCode` is the HTTP status Clickhouse
+  returned (or the status the failure was detected under), and `message`
+  carries the error body Clickhouse sent back.
+- `FS2CHConnectionException(cause)` — the client couldn't reach Clickhouse at
+  all (wraps a `java.net.ConnectException`).
+- `FS2CHDecompressionException(cause)` — decompressing the response body
+  failed.
+
+These are regular exceptions surfaced through the `F[_]` effect, so handle
+them the same way you'd handle any other failure in your stream, e.g. with
+`handleErrorWith`:
+
+```scala
+import fs2.clickhouse.exceptions.FS2CHQueryFailed
+
+fs2.Stream
+  .resource(ClickhouseStream.http[IO]("localhost"))
+  .flatMap(_.query[User]("select * from users"))
+  .handleErrorWith {
+    case FS2CHQueryFailed(status, message, _) =>
+      fs2.Stream.eval(IO.println(s"query failed ($status): $message")).drain
+  }
   .compile
   .toList
 ```
