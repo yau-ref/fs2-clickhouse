@@ -3,7 +3,7 @@ import sbtassembly.AssemblyPlugin.autoImport._
 
 ThisBuild / version := "0.1.0"
 
-val scala3 = "3.3.4"
+val scala3 = "3.3.8"
 val scala213 = "2.13.18"
 val supportedScalaVersions = Seq(scala3, scala213)
 
